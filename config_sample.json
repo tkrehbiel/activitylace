@@ -1,0 +1,15 @@
+{
+  "server": {
+    "host": "",
+    "certificate": "",
+    "privatekey": "",
+    "port": 443
+  },
+  "users": [
+    {
+      "name": "",
+      "displayName": "",
+      "outboxSource": ""
+    }
+  ]
+}

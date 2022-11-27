@@ -1,0 +1,43 @@
+package page
+
+// ActorEndpoint is a template for an ActivityPub Actor endpoint
+var ActorEndpoint = StaticPage{
+	Path:        "/a/{username}", // must be set for each actor
+	Accept:      "application/ld+json, application/activity+json",
+	ContentType: "application/ld+json",
+	Template: `
+{
+	"@context": "https://www.w3.org/ns/activitystreams",
+	"type": "{{ .UserType }}",
+	"id": "{{ .UserID }}",
+	"url": "{{ .UserProfileURL }}",
+	"inbox": "{{ .InboxURL }}",
+	"outbox": "{{ .OutboxURL }}",
+	"name": "{{ .UserDisplayName }}",
+	"preferredUserName": "{{ .UserName }}",
+	"summary": "{{ .UserSummary }}"
+	{{- if .AvatarURL -}},
+	"icon": {
+		"type": "Image",
+		"url": "{{ .AvatarURL }}",
+		"width": {{ .AvatarWidth }},
+		"height": {{ .AvatarHeight }}
+	}
+	{{- end }}
+}`,
+}
+
+var ProfilePage = StaticPage{
+	Path:        "/profile/{username}", // must be set for each actor
+	Accept:      "*/*",
+	ContentType: "text/html",
+	Template: `
+<html>
+<head>
+<title>profile of {{ .UserName }}</title>
+</head>
+<body>
+<p>profile of {{ .UserName }}</p>
+</body>
+</html>`,
+}
