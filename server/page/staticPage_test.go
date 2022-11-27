@@ -30,7 +30,7 @@ func TestStaticPage_ServeHTTP(t *testing.T) {
 	body, _ := io.ReadAll(response.Body)
 
 	assert.Equal(t, []byte("test"), body)
-	assert.Equal(t, page.source.ContentType, response.Header.Get("ContentType"))
+	assert.Equal(t, page.source.ContentType, response.Header.Get("Content-Type"))
 }
 
 func TestStaticPage_Init_TemplateFails(t *testing.T) {

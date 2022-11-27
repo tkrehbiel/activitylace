@@ -106,7 +106,7 @@ func (ao *ActivityOutbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("ContentType", activity.ContentType)
+	w.Header().Set("Content-Type", activity.ContentType)
 	w.Write(jsonBytes)
 }
 
