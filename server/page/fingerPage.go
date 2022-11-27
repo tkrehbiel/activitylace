@@ -23,6 +23,7 @@ var WellKnownWebFinger = MultiStaticPage{
 }
 
 var WebFingerAccount = StaticPage{
+	ContentType: "application/json",
 	Template: `
 {
 	"subject": "{{ .WebFingerAccount .UserName }}",
