@@ -41,7 +41,7 @@ func TestWebFinger_UserPage(t *testing.T) {
 	}
 	var (
 		testAccount     = fmt.Sprintf("acct:%s@%s", testUser, testHost)
-		testUserID      = fmt.Sprintf("%s://%s/a/%s", testScheme, testHost, testUser)
+		testUserID      = fmt.Sprintf("%s://%s/%s/%s", testScheme, testHost, SubPath, testUser)
 		testUserProfile = fmt.Sprintf("%s://%s/profile/%s", testScheme, testHost, testUser)
 	)
 

@@ -45,7 +45,7 @@ func (s ActivityService) addStaticHandlers() {
 			umeta.UserType = usercfg.Type
 		}
 		pg := page.ActorEndpoint // copy
-		pg.Path = fmt.Sprintf("/a/%s", usercfg.Name)
+		pg.Path = fmt.Sprintf("/%s/%s", page.SubPath, usercfg.Name)
 		s.addPageHandler(page.NewStaticPage(pg), umeta)
 		pg = page.ProfilePage // copy
 		pg.Path = fmt.Sprintf("/profile/%s", usercfg.Name)
@@ -56,7 +56,7 @@ func (s ActivityService) addStaticHandlers() {
 
 	// Setup outbox for each user
 	for i, outbox := range s.outbox {
-		path := fmt.Sprintf("/a/%s/outbox", outbox.username)
+		path := fmt.Sprintf("/%s/%s/outbox", page.SubPath, outbox.username)
 		s.router.HandleFunc(path, s.outbox[i].ServeHTTP).Methods("GET")
 	}
 
@@ -109,7 +109,7 @@ func NewService(cfg Config) ActivityService {
 	for _, user := range cfg.Users {
 		dbname := fmt.Sprintf("outbox_%s.db", user.Name)
 		outbox := ActivityOutbox{
-			id:       path.Join(svc.meta.URL, fmt.Sprintf("a/%s/outbox", user.Name)),
+			id:       path.Join(svc.meta.URL, fmt.Sprintf("%s/%s/outbox", page.SubPath, user.Name)),
 			username: user.Name,
 			rssURL:   user.SourceURL,
 			storage:  data.NewSQLiteCollection("outbox", dbname),

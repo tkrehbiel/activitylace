@@ -2,7 +2,7 @@ package page
 
 // ActorEndpoint is a template for an ActivityPub Actor endpoint
 var ActorEndpoint = StaticPage{
-	Path:        "/a/{username}", // must be set for each actor
+	Path:        "", // must be set for each actor
 	Accept:      "application/ld+json, application/activity+json",
 	ContentType: "application/ld+json",
 	Template: `
@@ -13,8 +13,11 @@ var ActorEndpoint = StaticPage{
 	"url": "{{ .UserProfileURL }}",
 	"inbox": "{{ .InboxURL }}",
 	"outbox": "{{ .OutboxURL }}",
+	"followers": "{{ .FollowersURL }}",
+	"following": "{{ .FollowingURL }}",
 	"name": "{{ .UserDisplayName }}",
 	"preferredUserName": "{{ .UserName }}",
+	"manuallyApprovesFollowers": true,
 	"summary": "{{ .UserSummary }}"
 	{{- if .AvatarURL -}},
 	"icon": {

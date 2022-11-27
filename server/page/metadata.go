@@ -5,6 +5,8 @@ import (
 	"net/url"
 )
 
+const SubPath = "activity"
+
 // MetaData contains server information typically used in templates
 type MetaData struct {
 	URL      string // full server URL with scheme, host, port
@@ -20,7 +22,7 @@ func (m MetaData) WebFingerAccount(name string) string {
 
 // ActorURL gets an ActivtyPub Actor ID and endpoint URL
 func (m MetaData) ActorURL(name string) string {
-	s, _ := url.JoinPath(m.URL, fmt.Sprintf("a/%s", name))
+	s, _ := url.JoinPath(m.URL, fmt.Sprintf("%s/%s", SubPath, name))
 	return s
 }
 
@@ -61,11 +63,21 @@ type UserMetaData struct {
 }
 
 func (m UserMetaData) InboxURL() string {
-	s, _ := url.JoinPath(m.URL, fmt.Sprintf("a/%s/inbox", m.UserName))
+	s, _ := url.JoinPath(m.URL, fmt.Sprintf("%s/%s/inbox", SubPath, m.UserName))
 	return s
 }
 
 func (m UserMetaData) OutboxURL() string {
-	s, _ := url.JoinPath(m.URL, fmt.Sprintf("a/%s/outbox", m.UserName))
+	s, _ := url.JoinPath(m.URL, fmt.Sprintf("%s/%s/outbox", SubPath, m.UserName))
+	return s
+}
+
+func (m UserMetaData) FollowingURL() string {
+	s, _ := url.JoinPath(m.URL, fmt.Sprintf("%s/%s/following", SubPath, m.UserName))
+	return s
+}
+
+func (m UserMetaData) FollowersURL() string {
+	s, _ := url.JoinPath(m.URL, fmt.Sprintf("%s/%s/followers", SubPath, m.UserName))
 	return s
 }
