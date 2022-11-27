@@ -37,7 +37,6 @@ func TestWebFinger_UserPage(t *testing.T) {
 
 	meta := MetaData{
 		URL:      u.String(),
-		Scheme:   u.Scheme,
 		HostName: u.Hostname(),
 	}
 	var (

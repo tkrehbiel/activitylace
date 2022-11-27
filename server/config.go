@@ -23,6 +23,7 @@ type userConfig struct {
 }
 
 type Config struct {
+	URL    string       `json:"url"` // public-facing URL
 	Server serverConfig `json:"server"`
 	Users  []userConfig `json:"users"`
 }

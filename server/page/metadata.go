@@ -8,9 +8,7 @@ import (
 // MetaData contains server information typically used in templates
 type MetaData struct {
 	URL      string // full server URL with scheme, host, port
-	Scheme   string // http or https
 	HostName string // server hostname
-	Port     int    // server port
 }
 
 // These functions set the base paths for endpoints
@@ -44,7 +42,6 @@ func (m MetaData) NewUserMetaData(name string) UserMetaData {
 func NewMetaData(u *url.URL) MetaData {
 	return MetaData{
 		URL:      u.String(),
-		Scheme:   u.Scheme,
 		HostName: u.Hostname(),
 	}
 }

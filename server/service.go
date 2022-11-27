@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"path"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -114,21 +115,22 @@ func NewService(cfg Config) ActivityService {
 		outbox: make([]ActivityOutbox, 0),
 	}
 
-	u := svc.serverURL()
+	u, err := url.Parse(cfg.URL)
+	if err != nil {
+		fmt.Println(err)
+	}
 
 	// metadata available to page templates
 	svc.meta = page.MetaData{
-		URL:      u.String(),
-		Scheme:   u.Scheme,
+		URL:      cfg.URL,
 		HostName: u.Hostname(),
-		Port:     svc.Config.Server.Port,
 	}
 
 	// configure outboxes
 	for _, user := range cfg.Users {
 		dbname := fmt.Sprintf("outbox_%s.db", user.Name)
 		outbox := ActivityOutbox{
-			id:       fmt.Sprintf("%s/a/%s/outbox", svc.serverURL(), user.Name),
+			id:       path.Join(svc.meta.URL, fmt.Sprintf("a/%s/outbox", user.Name)),
 			username: user.Name,
 			rssURL:   user.SourceURL,
 			storage:  data.NewSQLiteCollection("outbox", dbname),
