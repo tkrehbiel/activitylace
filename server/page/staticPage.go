@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"strings"
 )
@@ -68,14 +69,18 @@ func (s *internalStaticPage) Init(meta any) error {
 // Must call Init() on the static page first, otherwise
 // this will return a 500 Internal Server Error.
 func (s internalStaticPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("StaticPage.ServeHTTP", s.source.Path)
+	logRequest("StaticPage.ServeHTTP", r)
 	if s.rendered == nil {
 		// Server error because we didn't render a page yet.
 		// TODO: Would like to render it here on-demand but there's no access to metadata.
-		fmt.Println("error: no static rendered content")
+		log.Println("no static rendered content")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.Header().Add("ContentType", s.source.ContentType)
 	w.Write(s.rendered)
+}
+
+func logRequest(message string, r *http.Request) {
+	log.Println(message, r.URL.String())
 }

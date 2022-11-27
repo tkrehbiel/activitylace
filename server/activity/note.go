@@ -2,7 +2,6 @@ package activity
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"time"
 )
@@ -54,7 +53,7 @@ func NewNote(jsonBytes []byte) Note {
 	var note Note
 	err := json.Unmarshal(jsonBytes, &note)
 	if err != nil {
-		fmt.Println(err) // TODO: handle better
+		log.Println("unmarshaling note json", err) // TODO: handle better
 	}
 	note.JSONBytes = jsonBytes
 	return note

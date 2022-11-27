@@ -87,8 +87,6 @@ func (p gofeedParser) Parse(reader io.Reader) ([]Item, error) {
 
 // Check remote RSS feed for changes
 func (c *FeedWatcher) Check(ctx context.Context) error {
-	fmt.Println("checking", c.URL)
-
 	r, err := http.NewRequestWithContext(ctx, "GET", c.URL, nil)
 	if err != nil {
 		return err
@@ -167,18 +165,18 @@ func (c *FeedWatcher) Watch(ctx context.Context, period time.Duration) {
 		select {
 		case <-ctx.Done():
 			// Parent context cancelled somehow
-			fmt.Println("context ended", ctx.Err())
+			log.Println("context ended", ctx.Err())
 			return
 		case <-sigChannel:
 			// CTRL-C
-			fmt.Println("received end signal")
+			log.Println("received end signal")
 			return
 		case <-ticker.C:
 			err := c.Check(ctx)
 			if err != nil {
 				// We just ignore the error for now
 				// TODO: Should be smarter
-				fmt.Println(err)
+				log.Println("checking feed", c.URL, err)
 			}
 		}
 	}

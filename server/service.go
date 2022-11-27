@@ -96,7 +96,8 @@ func NewService(cfg Config) ActivityService {
 
 	u, err := url.Parse(cfg.URL)
 	if err != nil {
-		fmt.Println(err)
+		log.Println("parsing url", cfg.URL, err)
+		return svc
 	}
 
 	// metadata available to page templates
@@ -130,12 +131,8 @@ func NewService(cfg Config) ActivityService {
 	return svc
 }
 
-func logRequest(r *http.Request) {
-	log.Println(r.URL.String())
-}
-
 func homeHandler(w http.ResponseWriter, r *http.Request) {
-	logRequest(r)
+	logRequest("homeHandler", r)
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "<html><body>This is activitylace. There's nothing to see here.</body></html>")
 }

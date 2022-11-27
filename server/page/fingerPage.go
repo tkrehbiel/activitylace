@@ -1,7 +1,6 @@
 package page
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"regexp"
@@ -69,7 +68,7 @@ func (s *MultiStaticPage) Add(username string, meta MetaData) {
 
 func (s MultiStaticPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// This one specifically uses the resource query parameter to lookup webfinger resources.
-	fmt.Println("StaticResourcePage.ServeHTTP", r.URL)
+	logRequest("MultiStaticPage.ServeHTTP", r)
 	resource := r.URL.Query().Get("resource")
 	if resource != "" {
 		matches := acctRegex.FindSubmatch([]byte(resource))

@@ -3,7 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"log"
 	"net/http"
 	"sort"
 	"time"
@@ -22,7 +22,7 @@ type ActivityOutbox struct {
 
 // NewItem is called when a new RSS item is detected by the watcher
 func (ao *ActivityOutbox) NewItem(item rss.Item) {
-	fmt.Println(item.Title)
+	log.Println("new item", item.Title)
 	obj := &activity.Note{
 		Context:   activity.Context,
 		Type:      activity.NoteType,
@@ -31,22 +31,21 @@ func (ao *ActivityOutbox) NewItem(item rss.Item) {
 		Published: item.Published.Format(activity.TimeFormat),
 		URL:       item.URL,
 	}
-	fmt.Println(string(obj.JSON()))
 	if err := ao.storage.Upsert(context.TODO(), obj); err != nil {
-		fmt.Println(err)
+		log.Println("updating database", err)
 	}
 }
 
 // StatusCode is called by the RSS watcher to report the latest fetch status code
 func (ao *ActivityOutbox) StatusCode(code int) {
-	fmt.Println("status code", code)
+	log.Println("feed return code", code)
 }
 
 // WatchRSS watches an RSS feed for new items and saves them as ActivityPub objects
 func (ao *ActivityOutbox) WatchRSS(ctx context.Context) {
 	err := ao.storage.Open()
 	if err != nil {
-		fmt.Println(err)
+		log.Println("opening database", err)
 		return
 	}
 	defer ao.storage.Close()
@@ -57,7 +56,6 @@ func (ao *ActivityOutbox) WatchRSS(ctx context.Context) {
 	objects, err := ao.storage.SelectAll(context.Background())
 	if err == nil {
 		for _, obj := range objects {
-			fmt.Println("loading", obj.ID())
 			note := data.ToNote(obj)
 			item := rss.Item{
 				ID:        obj.ID(),
@@ -69,17 +67,17 @@ func (ao *ActivityOutbox) WatchRSS(ctx context.Context) {
 		}
 	}
 
-	fmt.Println("watching", ao.rssURL)
+	log.Println("watching", ao.rssURL)
 	watcher.Watch(ctx, 5*time.Minute)
 }
 
 func (ao *ActivityOutbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("ActivityOutbox.ServeHTTP", ao.id)
+	logRequest("ActivityOutbox.ServeHTTP", r)
 	w.Header().Add("ContentType", activity.ContentType)
 
 	objects, err := ao.storage.SelectAll(context.TODO())
 	if err != nil {
-		fmt.Println(err) // TODO: need to sort out these log messages
+		log.Println("selecting from database", err) // TODO: need to sort out these log messages
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -105,9 +103,13 @@ func (ao *ActivityOutbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	jsonBytes, err := json.Marshal(&collection)
 	if err != nil {
-		fmt.Println(err) // TODO: need to sort out these log messages
+		log.Println("marshaling collection", err) // TODO: need to sort out these log messages
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.Write(jsonBytes)
+}
+
+func logRequest(message string, r *http.Request) {
+	log.Println(message, r.URL.String())
 }
