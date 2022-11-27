@@ -22,30 +22,6 @@ type ActivityService struct {
 	outbox []ActivityOutbox
 }
 
-func (s ActivityService) serverURL() *url.URL {
-	hostname := s.Config.Server.HostName
-	port := 80
-	scheme := "http"
-	if s.Config.Server.useTLS() {
-		scheme = "https"
-		port = 443
-	}
-
-	var (
-		u   *url.URL
-		err error
-	)
-	if s.Config.Server.Port == 0 || port == s.Config.Server.Port {
-		u, err = url.Parse(fmt.Sprintf("%s://%s", scheme, hostname))
-	} else {
-		u, err = url.Parse(fmt.Sprintf("%s://%s:%d", scheme, hostname, port))
-	}
-	if err != nil {
-		return nil
-	}
-	return u
-}
-
 func (s ActivityService) addStaticHandlers() {
 	s.router.HandleFunc("/", homeHandler).Methods("GET")
 	//r.HandleFunc("/activity/{username}", personHandler).Methods("GET")
@@ -61,15 +37,18 @@ func (s ActivityService) addStaticHandlers() {
 	}
 	s.addPageHandler(&page.WellKnownWebFinger, s.meta)
 
-	for _, u := range s.Config.Users {
-		umeta := s.meta.NewUserMetaData(u.Name)
-		umeta.UserDisplayName = u.DisplayName
-		umeta.UserType = "Organization"
+	for _, usercfg := range s.Config.Users {
+		umeta := s.meta.NewUserMetaData(usercfg.Name)
+		umeta.UserDisplayName = usercfg.DisplayName
+		umeta.UserType = "Person"
+		if usercfg.Type != "" {
+			umeta.UserType = usercfg.Type
+		}
 		pg := page.ActorEndpoint // copy
-		pg.Path = fmt.Sprintf("/a/%s", u.Name)
+		pg.Path = fmt.Sprintf("/a/%s", usercfg.Name)
 		s.addPageHandler(page.NewStaticPage(pg), umeta)
 		pg = page.ProfilePage // copy
-		pg.Path = fmt.Sprintf("/profile/%s", u.Name)
+		pg.Path = fmt.Sprintf("/profile/%s", usercfg.Name)
 		s.addPageHandler(page.NewStaticPage(pg), umeta)
 	}
 

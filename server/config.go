@@ -18,6 +18,7 @@ func (s serverConfig) useTLS() bool {
 
 type userConfig struct {
 	Name        string `json:"name"`
+	Type        string `json:"type,omitempty"`
 	DisplayName string `json:"displayName"`
 	SourceURL   string `json:"outboxSource"`
 }
