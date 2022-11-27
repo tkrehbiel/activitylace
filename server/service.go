@@ -29,6 +29,7 @@ func (s ActivityService) addStaticHandlers() {
 	//r.HandleFunc("/activity/{username}/outbox", outboxHandler).Methods("GET")
 	//r.HandleFunc("/@{username}", webHandler).Methods("GET")
 
+	s.addPageHandler(page.NewStaticPage(page.WellKnownHostMeta), s.meta)
 	s.addPageHandler(page.NewStaticPage(page.WellKnownNodeInfo), s.meta)
 	s.addPageHandler(page.NewStaticPage(page.NodeInfo), s.meta)
 

@@ -3,10 +3,10 @@ package page
 import (
 	"bytes"
 	"fmt"
-	"html/template"
 	"log"
 	"net/http"
 	"strings"
+	"text/template"
 )
 
 // StaticPage configures how to render a static web page response.
