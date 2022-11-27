@@ -77,7 +77,7 @@ func (s internalStaticPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Header().Add("ContentType", s.source.ContentType)
+	w.Header().Set("ContentType", s.source.ContentType)
 	w.Write(s.rendered)
 }
 

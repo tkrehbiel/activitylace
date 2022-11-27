@@ -73,7 +73,6 @@ func (ao *ActivityOutbox) WatchRSS(ctx context.Context) {
 
 func (ao *ActivityOutbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	logRequest("ActivityOutbox.ServeHTTP", r)
-	w.Header().Add("ContentType", activity.ContentType)
 
 	objects, err := ao.storage.SelectAll(context.TODO())
 	if err != nil {
@@ -107,6 +106,7 @@ func (ao *ActivityOutbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("ContentType", activity.ContentType)
 	w.Write(jsonBytes)
 }
 

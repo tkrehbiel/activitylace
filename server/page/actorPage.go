@@ -3,8 +3,8 @@ package page
 // ActorEndpoint is a template for an ActivityPub Actor endpoint
 var ActorEndpoint = StaticPage{
 	Path:        "", // must be set for each actor
-	Accept:      "application/ld+json, application/activity+json",
-	ContentType: "application/ld+json",
+	Accept:      "application/activity+json",
+	ContentType: "application/activity+json",
 	Template: `
 {
 	"@context": "https://www.w3.org/ns/activitystreams",

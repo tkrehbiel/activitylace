@@ -58,7 +58,7 @@ func (s ActivityService) addStaticHandlers() {
 	// Setup outbox for each user
 	for i, outbox := range s.outbox {
 		path := fmt.Sprintf("/%s/%s/outbox", page.SubPath, outbox.username)
-		s.router.HandleFunc(path, s.outbox[i].ServeHTTP).Methods("GET")
+		s.router.HandleFunc(path, s.outbox[i].ServeHTTP).Methods("GET") // TODO: filter by Accept
 	}
 
 	// TODO: actor endpoints
