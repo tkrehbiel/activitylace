@@ -41,15 +41,33 @@ func (ao *ActivityOutbox) StatusCode(code int) {
 	log.Println("feed return code", code)
 }
 
+func (ao *ActivityOutbox) GetLatestNotes(n int) []activity.Note {
+	objects, err := ao.storage.SelectAll(context.TODO())
+	if err != nil {
+		log.Println("selecting from database", err) // TODO: need to sort out these log messages
+		return nil
+	}
+
+	notes := make([]activity.Note, 0)
+
+	// Take only the last 10
+	if len(objects) > 0 {
+		for i := len(objects) - 1; len(notes) < n; i-- {
+			note := activity.NewNote(objects[i].JSON())
+			notes = append(notes, note)
+		}
+
+		// sort in reverse chronological order
+		sort.Slice(notes, func(a, b int) bool {
+			return notes[a].Timestamp().After(notes[b].Timestamp())
+		})
+	}
+
+	return notes
+}
+
 // WatchRSS watches an RSS feed for new items and saves them as ActivityPub objects
 func (ao *ActivityOutbox) WatchRSS(ctx context.Context) {
-	err := ao.storage.Open()
-	if err != nil {
-		log.Println("opening database", err)
-		return
-	}
-	defer ao.storage.Close()
-
 	watcher := rss.NewFeedWatcher(ao.rssURL, ao)
 
 	// Load previously-stored items
@@ -74,31 +92,15 @@ func (ao *ActivityOutbox) WatchRSS(ctx context.Context) {
 func (ao *ActivityOutbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	logRequest("ActivityOutbox.ServeHTTP", r)
 
-	objects, err := ao.storage.SelectAll(context.TODO())
-	if err != nil {
-		log.Println("selecting from database", err) // TODO: need to sort out these log messages
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	notes := ao.GetLatestNotes(10)
 
 	collection := activity.OrderedCollection{
 		Context:  activity.Context,
 		Type:     activity.OrderedCollectionType,
 		Identity: ao.id,
-		NumItems: len(objects),
-		Items:    make([]activity.Note, 0),
+		NumItems: len(notes),
+		Items:    notes,
 	}
-
-	// Take only the last 10
-	for i := len(objects) - 1; len(collection.Items) <= 10; i-- {
-		note := activity.NewNote(objects[i].JSON())
-		collection.Items = append(collection.Items, note)
-	}
-
-	// sort in reverse chronological order
-	sort.Slice(collection.Items, func(a, b int) bool {
-		return collection.Items[a].Timestamp().After(collection.Items[b].Timestamp())
-	})
 
 	jsonBytes, err := json.Marshal(&collection)
 	if err != nil {

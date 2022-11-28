@@ -65,6 +65,7 @@ func main() {
 	srv := server.NewService(cfg)
 
 	go func() {
+		defer srv.Close()
 		err := srv.ListenAndServe()
 		if err != nil {
 			log.Println(err)

@@ -37,10 +37,16 @@ var ProfilePage = StaticPage{
 	Template: `
 <html>
 <head>
-<title>profile of {{ .UserName }}</title>
+<title>{{ .UserDisplayName }}</title>
 </head>
 <body>
-<p>profile of {{ .UserName }}</p>
+<h1>{{ .UserDisplayName }}</h1>
+<p>Latest activity from this account</p>
+<ul>
+	{{ range .LatestNotes }}
+	<li><a href="{{ .URL }}">{{ .Content }}</a></li>
+	{{ end }}
+</ul>
 </body>
 </html>`,
 }

@@ -22,7 +22,7 @@ type ActivityService struct {
 	outbox []ActivityOutbox
 }
 
-func (s ActivityService) addStaticHandlers() {
+func (s *ActivityService) addStaticHandlers() {
 	s.router.HandleFunc("/", homeHandler).Methods("GET")
 	//r.HandleFunc("/activity/{username}", personHandler).Methods("GET")
 	//r.HandleFunc("/activity/{username}/inbox", inboxHandler).Methods("POST")
@@ -38,16 +38,20 @@ func (s ActivityService) addStaticHandlers() {
 	}
 	s.addPageHandler(&page.WellKnownWebFinger, s.meta)
 
-	for _, usercfg := range s.Config.Users {
+	for i, usercfg := range s.Config.Users {
 		umeta := s.meta.NewUserMetaData(usercfg.Name)
 		umeta.UserDisplayName = usercfg.DisplayName
 		umeta.UserType = "Person"
 		if usercfg.Type != "" {
 			umeta.UserType = usercfg.Type
 		}
+		umeta.LatestNotes = s.outbox[i].GetLatestNotes(10)
+
 		pg := page.ActorEndpoint // copy
 		pg.Path = fmt.Sprintf("/%s/%s", page.SubPath, usercfg.Name)
 		s.addPageHandler(page.NewStaticPage(pg), umeta)
+
+		// TODO: This should be a dynamic page since it should include latest activity
 		pg = page.ProfilePage // copy
 		pg.Path = fmt.Sprintf("/profile/%s", usercfg.Name)
 		s.addPageHandler(page.NewStaticPage(pg), umeta)
@@ -65,7 +69,7 @@ func (s ActivityService) addStaticHandlers() {
 	// TODO: robots.txt
 }
 
-func (s ActivityService) addPageHandler(pg page.StaticPageHandler, meta any) {
+func (s *ActivityService) addPageHandler(pg page.StaticPageHandler, meta any) {
 	pg.Init(meta)
 	router := s.router.HandleFunc(pg.Path(), pg.ServeHTTP).Methods("GET")
 	if !s.Config.Server.AcceptAll && pg.Accept() != "" && pg.Accept() != "*/*" {
@@ -73,7 +77,22 @@ func (s ActivityService) addPageHandler(pg page.StaticPageHandler, meta any) {
 	}
 }
 
-func (s ActivityService) ListenAndServe() error {
+func (s *ActivityService) Open() error {
+	for i := range s.outbox {
+		if err := s.outbox[i].storage.Open(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *ActivityService) Close() {
+	for i := range s.outbox {
+		s.outbox[i].storage.Close()
+	}
+}
+
+func (s *ActivityService) ListenAndServe() error {
 	// Spawn RSS feed watcher goroutines
 	for _, outbox := range s.outbox {
 		go outbox.WatchRSS(context.Background())
@@ -116,6 +135,9 @@ func NewService(cfg Config) ActivityService {
 			rssURL:   user.SourceURL,
 			storage:  data.NewSQLiteCollection("outbox", dbname),
 		}
+		if err := outbox.storage.Open(); err != nil {
+			log.Println("opening database", err)
+		}
 		svc.outbox = append(svc.outbox, outbox)
 	}
 
@@ -135,5 +157,5 @@ func NewService(cfg Config) ActivityService {
 func homeHandler(w http.ResponseWriter, r *http.Request) {
 	logRequest("homeHandler", r)
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "<html><body>This is activitylace. There's nothing to see here.</body></html>")
+	fmt.Fprintf(w, "<html><title>activitylace</title><body>This is <a href=\"https://github.com/tkrehbiel/activitylace/\">activitylace</a>, an ActivityPub server implementation to complement static blogs. There's nothing to see here.</body></html>")
 }

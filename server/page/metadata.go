@@ -3,6 +3,8 @@ package page
 import (
 	"fmt"
 	"net/url"
+
+	"github.com/tkrehbiel/activitylace/server/activity"
 )
 
 const SubPath = "activity"
@@ -60,6 +62,7 @@ type UserMetaData struct {
 	AvatarURL       string
 	AvatarWidth     int
 	AvatarHeight    int
+	LatestNotes     []activity.Note
 }
 
 func (m UserMetaData) InboxURL() string {
