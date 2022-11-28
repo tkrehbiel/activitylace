@@ -27,5 +27,5 @@ func TestActorPage_JSON(t *testing.T) {
 	// Test that the JSON is valid
 	var data map[string]interface{}
 	require.NoError(t, json.Unmarshal(internalPage.rendered, &data))
-	assert.Equal(t, testName, data["preferredUserName"])
+	assert.Equal(t, testName, data["preferredUsername"])
 }
