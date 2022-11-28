@@ -1,9 +1,10 @@
 {
+  "url": "https://...",
   "server": {
-    "host": "",
+    "host": "localhost",
     "certificate": "",
     "privatekey": "",
-    "port": 443
+    "port": 8080
   },
   "users": [
     {

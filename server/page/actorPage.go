@@ -16,7 +16,7 @@ var ActorEndpoint = StaticPage{
 	"followers": "{{ .FollowersURL }}",
 	"following": "{{ .FollowingURL }}",
 	"name": "{{ .UserDisplayName }}",
-	"preferredUserName": "{{ .UserName }}",
+	"preferredUsername": "{{ .UserName }}",
 	"manuallyApprovesFollowers": true,
 	"summary": "{{ .UserSummary }}"
 	{{- if .AvatarURL -}},
