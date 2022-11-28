@@ -14,7 +14,7 @@ Resolution: Make sure the Content-Type of the webfinger json response is set to 
 
 (Weirdly, Pleroma doesn't report the error, I guess it isn't very strict about certificates.)
 
-Resolution: Was using `cert.pem` instead of `fullchain.pem` in the nginx config. It should be:
+Resolution: Was using Let's Encrypt's `cert.pem` instead of `fullchain.pem` in the nginx config. It should be:
 
 ```
 ssl_certificate /etc/letsencrypt/live/___/fullchain.pem;
@@ -23,3 +23,4 @@ ssl_certificate_key /etc/letsencrypt/live/___/privkey.pem;
 
 ## Mastodon gives up after Webfinger too
 
+Resolution: This was caused by [misspelling (actually mis-casing) `preferredUsername`](https://github.com/tkrehbiel/activitylace/commit/8efbefeec5b58cc7e5750a40c6a98d9f62179f10) in the Actor object response. It's case-sensitive. Mastodon takes the `preferredUsername` as canonical, and if it's misspelled, it tries to use an empty string as the username and everything blows up.

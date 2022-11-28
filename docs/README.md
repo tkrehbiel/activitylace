@@ -11,16 +11,16 @@ If this doesn't run on the same server, the blog server will have to redirect we
 - Written in Golang, which happens to be good at web-based services, and I happen to know how to do it. The down side is installing it will be more complicated, putting it out of reach of anyone who doesn't know how to setup and run a VPS or cloud server. A problem for another day.
   - I _do not_ want to write it in PHP for a LAMP stack. LAMP is dead. Let it die.
   - I don't know Node.js well enough to attempt that, but that might be a decent choice.
-- Supports any existing blog that has an RSS or Atom feed, possibly even one of them new-fangled JSON feeds.
-- Server will expose nodeinfo and webfinger endpoints. (done)
-- Server will expose an Organization actor endpoint representing the blog. (done)
-- Server will expose an Outbox that processes HTTP GET requests.
-- Server will initially expose an Inbox that ignores input.
+- ~~Supports any existing blog that has an RSS or Atom feed, possibly even one of them new-fangled JSON feeds.~~ (done, though not tested with very many feeds)
+- ~~Server will expose nodeinfo and webfinger endpoints.~~ (done)
+- ~~Server will expose an Organization actor endpoint representing the blog.~~ (done)
+- ~~Server will expose an Outbox that processes HTTP GET requests.~~ (done)
+- ~~Server will initially expose an Inbox that ignores input.~~ (done)
 - A link to the blog's RSS feed will essentially be the data source for the blog actor's Outbox.
-  - The server will need to periodically fetch the blog feed to check for new items. Every five minutes should be sufficient, but it should be configurable. (done)
-  - _Should_ use an HTTP HEAD to check if the page is modified before fetching the full feed. I used to know how to do that, but will probably have to look it up again to refresh my memory. [In fact it uses HTTP GET with If-Modified-Since.] (done)
+  - ~~The server will need to periodically fetch the blog feed to check for new items.~~ (done) Every five minutes should be sufficient, but it should be configurable.
+  - ~~_Should_ use an HTTP HEAD to check if the page is modified before fetching the full feed. I used to know how to do that, but will probably have to look it up again to refresh my memory.~~ [In fact it uses HTTP GET with If-Modified-Since.] (done)
 - Storage of ActivityPub objects should be accomplished with minimal resources. I don't want to require installing a full database, at least initially.
-  - After some experiments, I think a file-based sqlite backend is probably the simplest way to go. Was going to try to use json files, but there's too much complexity to manage. (done)
+  - ~~After some experiments, I think a file-based sqlite backend is probably the simplest way to go. Was going to try to use json files, but there's too much complexity to manage.~~ (done)
   - Keep in mind we will probably need a system to purge older items from the database periodically or else it will keep growing forever. A system to export items marked for deletion to external archival storage may be needed.
 
 ## Phase 2, Followers
