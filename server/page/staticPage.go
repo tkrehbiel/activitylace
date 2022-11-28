@@ -3,10 +3,11 @@ package page
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"text/template"
+
+	"github.com/tkrehbiel/activitylace/server/telemetry"
 )
 
 // StaticPage configures how to render a static web page response.
@@ -69,18 +70,15 @@ func (s *internalStaticPage) Init(meta any) error {
 // Must call Init() on the static page first, otherwise
 // this will return a 500 Internal Server Error.
 func (s internalStaticPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	logRequest("StaticPage.ServeHTTP", r)
+	telemetry.Request(r, "StaticPage.ServeHTTP")
+	telemetry.Increment("page_requests", 1)
 	if s.rendered == nil {
 		// Server error because we didn't render a page yet.
 		// TODO: Would like to render it here on-demand but there's no access to metadata.
-		log.Println("no static rendered content")
+		telemetry.Log("WARNING: no rendered content found for %s", s.Path)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", s.source.ContentType)
 	w.Write(s.rendered)
-}
-
-func logRequest(message string, r *http.Request) {
-	log.Println(message, r.URL.String())
 }

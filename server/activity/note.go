@@ -2,8 +2,9 @@ package activity
 
 import (
 	"encoding/json"
-	"log"
 	"time"
+
+	"github.com/tkrehbiel/activitylace/server/telemetry"
 )
 
 type PersistedObject struct {
@@ -30,7 +31,7 @@ func (o *Note) JSON() []byte {
 		b, err := json.Marshal(o)
 		if err != nil {
 			// TODO: should return an error
-			log.Println()
+			telemetry.Error(err, "marshaling Note json")
 			return nil
 		}
 		o.JSONBytes = b
@@ -53,7 +54,7 @@ func NewNote(jsonBytes []byte) Note {
 	var note Note
 	err := json.Unmarshal(jsonBytes, &note)
 	if err != nil {
-		log.Println("unmarshaling note json", err) // TODO: handle better
+		telemetry.Error(err, "unmarshaling Note json %s", string(jsonBytes)) // TODO: handle better
 	}
 	note.JSONBytes = jsonBytes
 	return note

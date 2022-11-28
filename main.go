@@ -4,12 +4,13 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"time"
 
 	"github.com/tkrehbiel/activitylace/server"
+	"github.com/tkrehbiel/activitylace/server/telemetry"
 )
 
 func validUser(username string) bool {
@@ -27,11 +28,11 @@ func readConfig(filename string) server.Config {
 	var cfg server.Config
 	b, err := os.ReadFile(filename)
 	if err != nil {
-		log.Println(err)
+		telemetry.Error(err, "opening config [%s]", filename)
 	} else {
 		c, err := server.ReadConfig(b)
 		if err != nil {
-			log.Println(err)
+			telemetry.Error(err, "parsing config [%s]", filename)
 		}
 		cfg = c
 	}
@@ -47,6 +48,8 @@ func main() {
 	port := flag.Int("port", 0, "listen port")
 
 	flag.Parse()
+
+	telemetry.Log("starting activitylace")
 
 	cfg := readConfig(*configFile)
 	if *host != "" {
@@ -65,10 +68,9 @@ func main() {
 	srv := server.NewService(cfg)
 
 	go func() {
-		defer srv.Close()
 		err := srv.ListenAndServe()
-		if err != nil {
-			log.Println(err)
+		if err != nil && err != http.ErrServerClosed {
+			telemetry.Error(err, "while listening")
 		}
 	}()
 
@@ -80,6 +82,6 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
 	defer cancel()
 	srv.Server.Shutdown(ctx)
-	log.Println("server stopping")
-	os.Exit(0)
+	srv.Close()
+	telemetry.Log("stopping activitylace cleanly")
 }

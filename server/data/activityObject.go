@@ -2,10 +2,10 @@ package data
 
 import (
 	"encoding/json"
-	"log"
 	"time"
 
 	"github.com/tkrehbiel/activitylace/server/activity"
+	"github.com/tkrehbiel/activitylace/server/telemetry"
 )
 
 // ActivityObject is a JSON object with common properties conforming to the ActivityPub spec
@@ -47,7 +47,7 @@ func NewMapObject(b []byte) ActivityObject {
 	err := json.Unmarshal(b, &o.mapData)
 	if err != nil {
 		// TODO: should return an error
-		log.Println()
+		telemetry.Error(err, "unmarshaling MapObject json %s", string(b))
 		return nil
 	}
 	return &o
@@ -56,8 +56,10 @@ func NewMapObject(b []byte) ActivityObject {
 func ToNote(obj ActivityObject) activity.Note {
 	var note activity.Note
 	err := json.Unmarshal(obj.JSON(), &note)
-	if err == nil {
-		note.JSONBytes = obj.JSON()
+	if err != nil {
+		// TODO: handle better
+		telemetry.Error(err, "unmarshaling Note json %s", string(obj.JSON()))
 	}
+	note.JSONBytes = obj.JSON()
 	return note
 }

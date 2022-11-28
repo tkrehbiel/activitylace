@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mmcdole/gofeed"
+	"github.com/tkrehbiel/activitylace/server/telemetry"
 )
 
 // Item is our internal, minimalist representation of a blog post
@@ -135,7 +135,7 @@ func (c *FeedWatcher) AddKnown(item Item) {
 func (c *FeedWatcher) parseItems(body io.Reader) ([]Item, error) {
 	allItems, err := c.itemParser.Parse(body)
 	if err != nil {
-		log.Println(err)
+		telemetry.Error(err, "parsing remote rss feed [%s]", c.URL)
 		return nil, err
 	}
 
@@ -165,18 +165,18 @@ func (c *FeedWatcher) Watch(ctx context.Context, period time.Duration) {
 		select {
 		case <-ctx.Done():
 			// Parent context cancelled somehow
-			log.Println("context ended", ctx.Err())
+			telemetry.Error(ctx.Err(), "context ended")
 			return
 		case <-sigChannel:
 			// CTRL-C
-			log.Println("received end signal")
+			telemetry.Log("received end signal")
 			return
 		case <-ticker.C:
 			err := c.Check(ctx)
 			if err != nil {
 				// We just ignore the error for now
 				// TODO: Should be smarter
-				log.Println("checking feed", c.URL, err)
+				telemetry.Error(err, "checking feed [%s]", c.URL)
 			}
 		}
 	}

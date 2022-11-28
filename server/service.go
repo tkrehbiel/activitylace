@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"path"
@@ -12,6 +11,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/tkrehbiel/activitylace/server/data"
 	"github.com/tkrehbiel/activitylace/server/page"
+	"github.com/tkrehbiel/activitylace/server/telemetry"
 )
 
 type ActivityService struct {
@@ -90,6 +90,7 @@ func (s *ActivityService) Close() {
 	for i := range s.outbox {
 		s.outbox[i].storage.Close()
 	}
+	telemetry.LogCounters()
 }
 
 func (s *ActivityService) ListenAndServe() error {
@@ -98,10 +99,10 @@ func (s *ActivityService) ListenAndServe() error {
 		go outbox.WatchRSS(context.Background())
 	}
 	if s.Config.Server.useTLS() {
-		log.Println("TLS server starting on port", s.Config.Server.Port)
+		telemetry.Log("tls listener starting on port %d", s.Config.Server.Port)
 		return s.Server.ListenAndServeTLS(s.Config.Server.Certificate, s.Config.Server.PrivateKey)
 	} else {
-		log.Println("HTTP server starting on port", s.Config.Server.Port)
+		telemetry.Log("http listener starting on port %d", s.Config.Server.Port)
 		return s.Server.ListenAndServe()
 	}
 }
@@ -116,7 +117,7 @@ func NewService(cfg Config) ActivityService {
 
 	u, err := url.Parse(cfg.URL)
 	if err != nil {
-		log.Println("parsing url", cfg.URL, err)
+		telemetry.Error(err, "parsing url [%s]", cfg.URL)
 		return svc
 	}
 
@@ -136,7 +137,7 @@ func NewService(cfg Config) ActivityService {
 			storage:  data.NewSQLiteCollection("outbox", dbname),
 		}
 		if err := outbox.storage.Open(); err != nil {
-			log.Println("opening database", err)
+			telemetry.Error(err, "opening sqlite database [%s]", dbname)
 		}
 		svc.outbox = append(svc.outbox, outbox)
 	}
@@ -155,7 +156,14 @@ func NewService(cfg Config) ActivityService {
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
-	logRequest("homeHandler", r)
+	telemetry.Request(r, "homeHandler")
+	telemetry.Increment("home_requests", 1)
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "<html><title>activitylace</title><body>This is <a href=\"https://github.com/tkrehbiel/activitylace/\">activitylace</a>, an ActivityPub server implementation to complement static blogs. There's nothing to see here.</body></html>")
+	fmt.Fprintf(w, `<html><title>activitylace</title>
+<body>
+<p>This is <a href=\"https://github.com/tkrehbiel/activitylace/\">activitylace</a>,
+an experimental ActivityPub server implementation to complement static blogs.
+There's nothing to see here.</p>
+</body>
+</html>`)
 }

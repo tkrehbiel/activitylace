@@ -1,9 +1,10 @@
 package page
 
 import (
-	"log"
 	"net/http"
 	"regexp"
+
+	"github.com/tkrehbiel/activitylace/server/telemetry"
 )
 
 // MultiStaticPage can render one of many different StaticPages depending on a request param.
@@ -69,7 +70,7 @@ func (s *MultiStaticPage) Add(username string, meta MetaData) {
 
 func (s MultiStaticPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// This one specifically uses the resource query parameter to lookup webfinger resources.
-	logRequest("MultiStaticPage.ServeHTTP", r)
+	telemetry.Request(r, "MultiStaticPage.ServeHTTP")
 	resource := r.URL.Query().Get("resource")
 	if resource != "" {
 		matches := acctRegex.FindSubmatch([]byte(resource))
@@ -80,13 +81,16 @@ func (s MultiStaticPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				s.Pages[username].ServeHTTP(w, r)
 				return
 			} else {
-				log.Printf("WARNING: unrecognized webfinger resource request for [%s]", resource)
+				telemetry.Log("WARNING: unrecognized webfinger resource request for [%s]", resource)
+				telemetry.Increment("webfinger_unrecognized", 1)
 			}
 		} else {
-			log.Printf("WARNING: malformed webfinger resource request [%s]", resource)
+			telemetry.Log("WARNING: malformed webfinger resource request [%s]", resource)
+			telemetry.Increment("webfinger_malformed", 1)
 		}
 	} else {
-		log.Println("WARNING: webfinger request without resource param")
+		telemetry.Log("WARNING: webfinger request without resource param")
+		telemetry.Increment("webfinger_missing", 1)
 	}
 	w.WriteHeader(http.StatusNotFound)
 }

@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 	"sort"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/tkrehbiel/activitylace/server/activity"
 	"github.com/tkrehbiel/activitylace/server/data"
 	"github.com/tkrehbiel/activitylace/server/rss"
+	"github.com/tkrehbiel/activitylace/server/telemetry"
 )
 
 type ActivityOutbox struct {
@@ -22,7 +22,8 @@ type ActivityOutbox struct {
 
 // NewItem is called when a new RSS item is detected by the watcher
 func (ao *ActivityOutbox) NewItem(item rss.Item) {
-	log.Println("new item", item.Title)
+	telemetry.Trace("new item [%s]", item.Title)
+	telemetry.Increment("rss_newitems", 1)
 	obj := &activity.Note{
 		Context:   activity.Context,
 		Type:      activity.NoteType,
@@ -32,19 +33,20 @@ func (ao *ActivityOutbox) NewItem(item rss.Item) {
 		URL:       item.URL,
 	}
 	if err := ao.storage.Upsert(context.TODO(), obj); err != nil {
-		log.Println("updating database", err)
+		telemetry.Error(err, "updating database")
 	}
 }
 
 // StatusCode is called by the RSS watcher to report the latest fetch status code
 func (ao *ActivityOutbox) StatusCode(code int) {
-	log.Println("feed return code", code)
+	telemetry.Trace("rss feed return code [%d]", code)
+	telemetry.Increment("rss_fetches", 1)
 }
 
 func (ao *ActivityOutbox) GetLatestNotes(n int) []activity.Note {
 	objects, err := ao.storage.SelectAll(context.TODO())
 	if err != nil {
-		log.Println("selecting from database", err) // TODO: need to sort out these log messages
+		telemetry.Error(err, "selecting from database")
 		return nil
 	}
 
@@ -85,12 +87,13 @@ func (ao *ActivityOutbox) WatchRSS(ctx context.Context) {
 		}
 	}
 
-	log.Println("watching", ao.rssURL)
+	telemetry.Log("watching %s", ao.rssURL)
 	watcher.Watch(ctx, 5*time.Minute)
 }
 
 func (ao *ActivityOutbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	logRequest("ActivityOutbox.ServeHTTP", r)
+	telemetry.Request(r, "ActivityOutbox.ServeHTTP")
+	telemetry.Increment("page_requests", 1)
 
 	notes := ao.GetLatestNotes(10)
 
@@ -104,14 +107,10 @@ func (ao *ActivityOutbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	jsonBytes, err := json.Marshal(&collection)
 	if err != nil {
-		log.Println("marshaling collection", err) // TODO: need to sort out these log messages
+		telemetry.Error(err, "marshaling collection")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", activity.ContentType)
 	w.Write(jsonBytes)
-}
-
-func logRequest(message string, r *http.Request) {
-	log.Println(message, r.URL.String())
 }
