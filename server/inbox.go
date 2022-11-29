@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/tkrehbiel/activitylace/server/activity"
@@ -40,5 +42,37 @@ func (ai *ActivityInbox) GetHTTP(w http.ResponseWriter, r *http.Request) {
 func (ai *ActivityInbox) PostHTTP(w http.ResponseWriter, r *http.Request) {
 	telemetry.Request(r, "ActivityInbox.ServeHTTP %s", ai.username)
 	telemetry.Increment("post_requests", 1)
-	w.WriteHeader(http.StatusMethodNotAllowed) // TODO: just for now
+
+	jsonBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		telemetry.Error(err, "reading body bytes")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	obj := data.NewMapObject(jsonBytes)
+	err = ai.storage.Upsert(context.TODO(), obj)
+	if err != nil {
+		telemetry.Error(err, "saving object to database")
+	}
+
+	var header activity.ActivityHeader
+	err = json.Unmarshal(jsonBytes, &header)
+	if err != nil {
+		telemetry.Error(err, "unmarshaling json")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	switch header.Type {
+	case "Follow":
+		telemetry.Trace("Follow")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	case "Undo":
+		telemetry.Trace("Undo")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	default:
+		// unrecognized Activity Type
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
 }
