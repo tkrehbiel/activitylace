@@ -1,11 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -20,14 +23,11 @@ type ActivityService struct {
 	router *mux.Router
 	meta   page.MetaData
 	outbox []ActivityOutbox
+	inbox  []ActivityInbox
 }
 
-func (s *ActivityService) addStaticHandlers() {
+func (s *ActivityService) addHandlers() {
 	s.router.HandleFunc("/", homeHandler).Methods("GET")
-	//r.HandleFunc("/activity/{username}", personHandler).Methods("GET")
-	//r.HandleFunc("/activity/{username}/inbox", inboxHandler).Methods("POST")
-	//r.HandleFunc("/activity/{username}/outbox", outboxHandler).Methods("GET")
-	//r.HandleFunc("/@{username}", webHandler).Methods("GET")
 
 	s.addPageHandler(page.NewStaticPage(page.WellKnownHostMeta), s.meta)
 	s.addPageHandler(page.NewStaticPage(page.WellKnownNodeInfo), s.meta)
@@ -37,6 +37,12 @@ func (s *ActivityService) addStaticHandlers() {
 		page.WellKnownWebFinger.Add(u.Name, s.meta)
 	}
 	s.addPageHandler(&page.WellKnownWebFinger, s.meta)
+
+	// inboxes and outboxes must be initialized before this
+	if len(s.inbox) == 0 || len(s.outbox) == 0 {
+		telemetry.Error(nil, "inboxes and outboxes must be initialized")
+		return
+	}
 
 	for i, usercfg := range s.Config.Users {
 		umeta := s.meta.NewUserMetaData(usercfg.Name)
@@ -59,13 +65,19 @@ func (s *ActivityService) addStaticHandlers() {
 
 	// Dynamic handlers
 
-	// Setup outbox for each user
+	// Outbox handlers for each user
 	for i, outbox := range s.outbox {
 		path := fmt.Sprintf("/%s/%s/outbox", page.SubPath, outbox.username)
 		s.router.HandleFunc(path, s.outbox[i].ServeHTTP).Methods("GET") // TODO: filter by Accept
 	}
 
-	// TODO: actor endpoints
+	// Inbox handlers for each user
+	for i, inbox := range s.inbox {
+		path := fmt.Sprintf("/%s/%s/inbox", page.SubPath, inbox.username)
+		s.router.HandleFunc(path, RequestLogger{Handler: s.inbox[i].GetHTTP}.ServeHTTP).Methods("GET")   // TODO: filter by Accept
+		s.router.HandleFunc(path, RequestLogger{Handler: s.inbox[i].PostHTTP}.ServeHTTP).Methods("POST") // TODO: filter by Accept
+	}
+
 	// TODO: robots.txt
 }
 
@@ -77,18 +89,13 @@ func (s *ActivityService) addPageHandler(pg page.StaticPageHandler, meta any) {
 	}
 }
 
-func (s *ActivityService) Open() error {
-	for i := range s.outbox {
-		if err := s.outbox[i].storage.Open(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
+// Close anything related to the service before exiting
 func (s *ActivityService) Close() {
 	for i := range s.outbox {
 		s.outbox[i].storage.Close()
+	}
+	for i := range s.inbox {
+		s.inbox[i].storage.Close()
 	}
 	telemetry.LogCounters()
 }
@@ -127,23 +134,38 @@ func NewService(cfg Config) ActivityService {
 		HostName: u.Hostname(),
 	}
 
-	// configure outboxes
+	// configure inboxes and outboxes
 	for _, user := range cfg.Users {
-		dbname := fmt.Sprintf("outbox_%s.db", user.Name)
+		// TODO: create UserMetaData here so we can reference it
+
+		outboxName := fmt.Sprintf("outbox_%s.db", user.Name)
 		outbox := ActivityOutbox{
 			id:       path.Join(svc.meta.URL, fmt.Sprintf("%s/%s/outbox", page.SubPath, user.Name)),
 			username: user.Name,
 			rssURL:   user.SourceURL,
-			storage:  data.NewSQLiteCollection("outbox", dbname),
+			storage:  data.NewSQLiteCollection("outbox", outboxName),
 		}
 		if err := outbox.storage.Open(); err != nil {
-			telemetry.Error(err, "opening sqlite database [%s]", dbname)
+			telemetry.Error(err, "opening sqlite database [%s]", outboxName)
+		} else {
+			svc.outbox = append(svc.outbox, outbox)
 		}
-		svc.outbox = append(svc.outbox, outbox)
+
+		inboxName := fmt.Sprintf("inbox_%s.db", user.Name)
+		inbox := ActivityInbox{
+			id:       path.Join(svc.meta.URL, fmt.Sprintf("%s/%s/inbox", page.SubPath, user.Name)),
+			username: user.Name,
+			storage:  data.NewSQLiteCollection("inbox", inboxName),
+		}
+		if err := inbox.storage.Open(); err != nil {
+			telemetry.Error(err, "opening sqlite database [%s]", inboxName)
+		} else {
+			svc.inbox = append(svc.inbox, inbox)
+		}
 	}
 
 	// configure web handlers
-	svc.addStaticHandlers()
+	svc.addHandlers()
 
 	svc.Server = http.Server{
 		Handler:      svc.router,
@@ -153,6 +175,32 @@ func NewService(cfg Config) ActivityService {
 		IdleTimeout:  time.Second * 60,
 	}
 	return svc
+}
+
+type RequestLogger struct {
+	Handler http.HandlerFunc
+}
+
+func (rl RequestLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	headers := make([]string, 0)
+	for k, v := range r.Header {
+		s := fmt.Sprintf("%s: %s", k, strings.Join(v, ", "))
+		headers = append(headers, s)
+	}
+	telemetry.Trace(strings.Join(headers, " | "))
+
+	buf, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		telemetry.Error(err, "error reading body")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if len(buf) > 0 {
+		telemetry.Trace(string(buf))
+	}
+	reader := ioutil.NopCloser(bytes.NewBuffer(buf))
+	r.Body = reader
+	rl.Handler(w, r)
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {

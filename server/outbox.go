@@ -92,8 +92,8 @@ func (ao *ActivityOutbox) WatchRSS(ctx context.Context) {
 }
 
 func (ao *ActivityOutbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	telemetry.Request(r, "ActivityOutbox.ServeHTTP")
-	telemetry.Increment("page_requests", 1)
+	telemetry.Request(r, "ActivityOutbox.ServeHTTP %s", ao.username)
+	telemetry.Increment("get_requests", 1)
 
 	notes := ao.GetLatestNotes(10)
 

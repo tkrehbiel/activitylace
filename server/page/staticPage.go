@@ -71,11 +71,11 @@ func (s *internalStaticPage) Init(meta any) error {
 // this will return a 500 Internal Server Error.
 func (s internalStaticPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	telemetry.Request(r, "StaticPage.ServeHTTP")
-	telemetry.Increment("page_requests", 1)
+	telemetry.Increment("get_requests", 1)
 	if s.rendered == nil {
 		// Server error because we didn't render a page yet.
 		// TODO: Would like to render it here on-demand but there's no access to metadata.
-		telemetry.Log("WARNING: no rendered content found for %s", s.Path)
+		telemetry.Log("WARNING: no rendered content found for %s", s.Path())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

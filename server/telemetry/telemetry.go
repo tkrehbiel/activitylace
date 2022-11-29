@@ -59,8 +59,8 @@ func Error(err error, format string, args ...any) {
 }
 
 // Request logs essential information about an HTTP request
-func Request(r *http.Request, message ...string) {
-	data.logger.Println(strings.Join(message, " "), r.Method, r.URL)
+func Request(r *http.Request, format string, args ...string) {
+	data.logger.Println(fmt.Sprintf(format, args), r.Method, r.URL)
 }
 
 // Increment increases a count, thread-safe
