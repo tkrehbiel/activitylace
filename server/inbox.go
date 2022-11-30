@@ -1,20 +1,17 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 
 	"github.com/tkrehbiel/activitylace/server/activity"
-	"github.com/tkrehbiel/activitylace/server/data"
 	"github.com/tkrehbiel/activitylace/server/telemetry"
 )
 
 type ActivityInbox struct {
 	username string
 	id       string
-	storage  data.Collection
 }
 
 // GetHTTP handles GET requests to the inbox, which we don't do
@@ -50,23 +47,38 @@ func (ai *ActivityInbox) PostHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	obj := data.NewMapObject(jsonBytes)
-	err = ai.storage.Upsert(context.TODO(), obj)
-	if err != nil {
-		telemetry.Error(err, "saving object to database")
+	var activity struct {
+		Type     string `json:"type"`
+		Identity string `json:"id"`
 	}
-
-	var header activity.ActivityHeader
-	err = json.Unmarshal(jsonBytes, &header)
-	if err != nil {
-		telemetry.Error(err, "unmarshaling json")
-		w.WriteHeader(http.StatusInternalServerError)
+	if err := json.Unmarshal(jsonBytes, &activity); err != nil {
+		telemetry.Error(err, "unmarshaling json [%s]", string(jsonBytes))
+		w.WriteHeader(http.StatusNotAcceptable)
 		return
 	}
 
-	switch header.Type {
+	/* 	var note storage.Note
+	   	if err := json.Unmarshal(jsonBytes, &note); err != nil {
+	   		telemetry.Error(err, "unmarshaling json [%s]", string(jsonBytes))
+	   		w.WriteHeader(http.StatusNotAcceptable)
+	   		return
+	   	}
+	   	note.Source = string(jsonBytes)
+
+	   	var header activity.ActivityHeader
+	   	err = json.Unmarshal(jsonBytes, &header)
+	   	if err != nil {
+	   		telemetry.Error(err, "unmarshaling json")
+	   		w.WriteHeader(http.StatusInternalServerError)
+	   		return
+	   	}
+	*/
+	switch activity.Type {
 	case "Follow":
 		telemetry.Trace("Follow")
+		// Expecting:
+		// actor = account that wants to follow
+		// object = account to follow
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	case "Undo":
 		telemetry.Trace("Undo")

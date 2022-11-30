@@ -68,7 +68,7 @@ func main() {
 	srv := server.NewService(cfg)
 
 	go func() {
-		err := srv.ListenAndServe()
+		err := srv.ListenAndServe(context.Background())
 		if err != nil && err != http.ErrServerClosed {
 			telemetry.Error(err, "while listening")
 		}

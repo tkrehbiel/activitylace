@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/tkrehbiel/activitylace/server/data"
 	"github.com/tkrehbiel/activitylace/server/page"
+	"github.com/tkrehbiel/activitylace/server/storage"
 	"github.com/tkrehbiel/activitylace/server/telemetry"
 )
 
@@ -22,8 +22,15 @@ type ActivityService struct {
 	Server http.Server
 	router *mux.Router
 	meta   page.MetaData
-	outbox []ActivityOutbox
-	inbox  []ActivityInbox
+	users  []ActivityUser
+}
+
+type ActivityUser struct {
+	name   string
+	meta   page.UserMetaData
+	store  storage.Database
+	outbox ActivityOutbox
+	inbox  ActivityInbox
 }
 
 func (s *ActivityService) addHandlers() {
@@ -38,44 +45,24 @@ func (s *ActivityService) addHandlers() {
 	}
 	s.addPageHandler(&page.WellKnownWebFinger, s.meta)
 
-	// inboxes and outboxes must be initialized before this
-	if len(s.inbox) == 0 || len(s.outbox) == 0 {
-		telemetry.Error(nil, "inboxes and outboxes must be initialized")
-		return
-	}
-
-	for i, usercfg := range s.Config.Users {
-		umeta := s.meta.NewUserMetaData(usercfg.Name)
-		umeta.UserDisplayName = usercfg.DisplayName
-		umeta.UserType = "Person"
-		if usercfg.Type != "" {
-			umeta.UserType = usercfg.Type
-		}
-		umeta.LatestNotes = s.outbox[i].GetLatestNotes(10)
+	for _, user := range s.users {
+		// TODO: umeta.LatestNotes = s.outbox[i].GetLatestNotes(10)
 
 		pg := page.ActorEndpoint // copy
-		pg.Path = fmt.Sprintf("/%s/%s", page.SubPath, usercfg.Name)
-		s.addPageHandler(page.NewStaticPage(pg), umeta)
+		pg.Path = fmt.Sprintf("/%s/%s", page.SubPath, user.name)
+		s.addPageHandler(page.NewStaticPage(pg), user.meta)
 
 		// TODO: This should be a dynamic page since it should include latest activity
 		pg = page.ProfilePage // copy
-		pg.Path = fmt.Sprintf("/profile/%s", usercfg.Name)
-		s.addPageHandler(page.NewStaticPage(pg), umeta)
-	}
+		pg.Path = fmt.Sprintf("/profile/%s", user.name)
+		s.addPageHandler(page.NewStaticPage(pg), user.meta)
 
-	// Dynamic handlers
+		outpath := fmt.Sprintf("/%s/%s/outbox", page.SubPath, user.name)
+		s.router.HandleFunc(outpath, user.outbox.ServeHTTP).Methods("GET") // TODO: filter by Accept
 
-	// Outbox handlers for each user
-	for i, outbox := range s.outbox {
-		path := fmt.Sprintf("/%s/%s/outbox", page.SubPath, outbox.username)
-		s.router.HandleFunc(path, s.outbox[i].ServeHTTP).Methods("GET") // TODO: filter by Accept
-	}
-
-	// Inbox handlers for each user
-	for i, inbox := range s.inbox {
-		path := fmt.Sprintf("/%s/%s/inbox", page.SubPath, inbox.username)
-		s.router.HandleFunc(path, RequestLogger{Handler: s.inbox[i].GetHTTP}.ServeHTTP).Methods("GET")   // TODO: filter by Accept
-		s.router.HandleFunc(path, RequestLogger{Handler: s.inbox[i].PostHTTP}.ServeHTTP).Methods("POST") // TODO: filter by Accept
+		inpath := fmt.Sprintf("/%s/%s/inbox", page.SubPath, user.name)
+		s.router.HandleFunc(inpath, RequestLogger{Handler: user.inbox.GetHTTP}.ServeHTTP).Methods("GET")   // TODO: filter by Accept
+		s.router.HandleFunc(inpath, RequestLogger{Handler: user.inbox.PostHTTP}.ServeHTTP).Methods("POST") // TODO: filter by Accept
 	}
 
 	// TODO: robots.txt
@@ -91,19 +78,16 @@ func (s *ActivityService) addPageHandler(pg page.StaticPageHandler, meta any) {
 
 // Close anything related to the service before exiting
 func (s *ActivityService) Close() {
-	for i := range s.outbox {
-		s.outbox[i].storage.Close()
-	}
-	for i := range s.inbox {
-		s.inbox[i].storage.Close()
+	for _, user := range s.users {
+		user.store.Close()
 	}
 	telemetry.LogCounters()
 }
 
-func (s *ActivityService) ListenAndServe() error {
+func (s *ActivityService) ListenAndServe(ctx context.Context) error {
 	// Spawn RSS feed watcher goroutines
-	for _, outbox := range s.outbox {
-		go outbox.WatchRSS(context.Background())
+	for _, user := range s.users {
+		go user.outbox.WatchRSS(ctx)
 	}
 	if s.Config.Server.useTLS() {
 		telemetry.Log("tls listener starting on port %d", s.Config.Server.Port)
@@ -119,7 +103,7 @@ func NewService(cfg Config) ActivityService {
 	svc := ActivityService{
 		Config: cfg,
 		router: mux.NewRouter(),
-		outbox: make([]ActivityOutbox, 0),
+		users:  make([]ActivityUser, 0),
 	}
 
 	u, err := url.Parse(cfg.URL)
@@ -135,32 +119,38 @@ func NewService(cfg Config) ActivityService {
 	}
 
 	// configure inboxes and outboxes
-	for _, user := range cfg.Users {
-		// TODO: create UserMetaData here so we can reference it
+	for _, usercfg := range cfg.Users {
+		dbName := fmt.Sprintf("user_%s.db", usercfg.Name)
+		store := storage.NewDatabase(dbName)
 
-		outboxName := fmt.Sprintf("outbox_%s.db", user.Name)
-		outbox := ActivityOutbox{
-			id:       path.Join(svc.meta.URL, fmt.Sprintf("%s/%s/outbox", page.SubPath, user.Name)),
-			username: user.Name,
-			rssURL:   user.SourceURL,
-			storage:  data.NewSQLiteCollection("outbox", outboxName),
-		}
-		if err := outbox.storage.Open(); err != nil {
-			telemetry.Error(err, "opening sqlite database [%s]", outboxName)
-		} else {
-			svc.outbox = append(svc.outbox, outbox)
+		serverUser := ActivityUser{
+			name:  usercfg.Name,
+			meta:  svc.meta.NewUserMetaData(usercfg.Name),
+			store: store,
 		}
 
-		inboxName := fmt.Sprintf("inbox_%s.db", user.Name)
-		inbox := ActivityInbox{
-			id:       path.Join(svc.meta.URL, fmt.Sprintf("%s/%s/inbox", page.SubPath, user.Name)),
-			username: user.Name,
-			storage:  data.NewSQLiteCollection("inbox", inboxName),
+		serverUser.meta.UserDisplayName = usercfg.DisplayName
+		serverUser.meta.UserType = "Person"
+		if usercfg.Type != "" {
+			serverUser.meta.UserType = usercfg.Type
 		}
-		if err := inbox.storage.Open(); err != nil {
-			telemetry.Error(err, "opening sqlite database [%s]", inboxName)
+
+		serverUser.outbox = ActivityOutbox{
+			id:       path.Join(svc.meta.URL, fmt.Sprintf("%s/%s/outbox", page.SubPath, usercfg.Name)),
+			username: usercfg.Name,
+			rssURL:   usercfg.SourceURL,
+			notes:    store.(storage.Notes),
+		}
+
+		serverUser.inbox = ActivityInbox{
+			id:       path.Join(svc.meta.URL, fmt.Sprintf("%s/%s/inbox", page.SubPath, usercfg.Name)),
+			username: usercfg.Name,
+		}
+
+		if err := serverUser.store.Open(); err != nil {
+			telemetry.Error(err, "opening sqlite database [%s]", dbName)
 		} else {
-			svc.inbox = append(svc.inbox, inbox)
+			svc.users = append(svc.users, serverUser)
 		}
 	}
 

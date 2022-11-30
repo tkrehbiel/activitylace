@@ -12,10 +12,17 @@ const (
 	ContentType = `application/activity+json; profile="https://www.w3.org/ns/activitystreams"`
 )
 
+// ActivityPub object types
 const (
 	NoteType              = "Note"
 	LinkType              = "Link"
 	OrderedCollectionType = "OrderedCollection"
+)
+
+// ActivityPub activity types
+const (
+	FollowType = "Follow"
+	UndoType   = "Undo"
 )
 
 const (
