@@ -24,3 +24,7 @@ ssl_certificate_key /etc/letsencrypt/live/___/privkey.pem;
 ## Mastodon gives up after Webfinger too
 
 Resolution: This was caused by [misspelling (actually mis-casing) `preferredUsername`](https://github.com/tkrehbiel/activitylace/commit/8efbefeec5b58cc7e5750a40c6a98d9f62179f10) in the Actor object response. It's case-sensitive. Mastodon takes the `preferredUsername` as canonical, and if it's misspelled, it tries to use an empty string as the username and everything blows up.
+
+## Implementation Note
+
+11/29/2022 After some thought, I think it's a mistake to try to represent ActivityPub objects internally _as_ native ActivityPub objects. The LSON-LD object format is ... weird. I think it will be easier to use an internal representation of actors, notes, follows, etc. and then translate them to and from ActivityPub when they are sent or received.

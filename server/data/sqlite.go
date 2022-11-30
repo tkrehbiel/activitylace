@@ -3,7 +3,6 @@ package data
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/glebarez/sqlite"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/tkrehbiel/activitylace/server/activity"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -133,15 +131,6 @@ func (s *sqliteCollection) SelectAll(ctx context.Context) ([]ActivityObject, err
 	}
 	// database error
 	return nil, fmt.Errorf("database error in %s: %w", s.name, tx.Error)
-}
-
-func (o activityObject) ToNote() activity.Note {
-	var note activity.Note
-	err := json.Unmarshal([]byte(o.ActivityJSON), &note)
-	if err == nil {
-		note.JSONBytes = []byte(o.ActivityJSON)
-	}
-	return note
 }
 
 func NewSQLiteCollection(name string, connection string) Collection {

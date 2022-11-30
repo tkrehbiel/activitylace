@@ -8,22 +8,29 @@ import (
 	"github.com/tkrehbiel/activitylace/server/telemetry"
 )
 
-// ActivityObject is a JSON object with common properties conforming to the ActivityPub spec
+// ActivityObject is a largely immutable object with common properties conforming to the ActivityPub spec.
+// The key feature is that the JSON representation remains immutable, which allows us to store
+// ActivityPub objects exactly as they are sent to us.
+// It isn't intended to be able to read all the properties of the object through this interface,
+// it's more for loading and saving the object to persistent storage.
 type ActivityObject interface {
 	JSON() []byte
 	ID() string
 	Timestamp() time.Time
 }
 
+// MapObject represents JSON objects as an unmarshalled map
 type MapObject struct {
 	jsonBytes []byte
-	mapData   map[string]interface{}
+	mapData   map[string]interface{} // TODO: turns out, not used anywhere, so delete
 }
 
+// JSON returns the original JSON of the object
 func (o *MapObject) JSON() []byte {
 	return o.jsonBytes
 }
 
+// ID returns the ActivityPub id property of the object or a zero value
 func (o *MapObject) ID() string {
 	if s, ok := o.mapData[activity.IDProperty].(string); ok {
 		return s
@@ -31,6 +38,7 @@ func (o *MapObject) ID() string {
 	return ""
 }
 
+// Timestamp returns the ActivityPub published property of the object or a zero value
 func (o *MapObject) Timestamp() time.Time {
 	if s, ok := o.mapData[activity.PublishedProperty].(string); ok {
 		if t, err := time.Parse(activity.TimeFormat, s); err != nil {
