@@ -87,8 +87,8 @@ func (s *ActivityService) Close() {
 
 func (s *ActivityService) ListenAndServe(ctx context.Context) error {
 	// Spawn RSS feed watcher goroutines
-	for _, user := range s.users {
-		go user.outbox.WatchRSS(ctx)
+	for i := range s.users {
+		go s.users[i].outbox.WatchRSS(ctx)
 	}
 	if s.Config.Server.useTLS() {
 		telemetry.Log("tls listener starting on port %d", s.Config.Server.Port)
