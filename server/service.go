@@ -46,8 +46,9 @@ func (s *ActivityService) addHandlers() {
 	}
 	s.addPageHandler(&page.WellKnownWebFinger, s.meta)
 
-	for _, user := range s.users {
+	for i := range s.users {
 		// TODO: umeta.LatestNotes = s.outbox[i].GetLatestNotes(10)
+		user := &s.users[i]
 
 		pg := page.ActorEndpoint // copy
 		pg.Path = fmt.Sprintf("/%s/%s", page.SubPath, user.name)
@@ -79,8 +80,8 @@ func (s *ActivityService) addPageHandler(pg page.StaticPageHandler, meta any) {
 
 // Close anything related to the service before exiting
 func (s *ActivityService) Close() {
-	for _, user := range s.users {
-		user.store.Close()
+	for i := range s.users {
+		s.users[i].store.Close()
 	}
 	telemetry.LogCounters()
 }
