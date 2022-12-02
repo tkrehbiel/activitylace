@@ -79,17 +79,9 @@ func (ao *ActivityOutbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	notes := ao.GetLatestNotes(10)
 
-	type noteObject struct {
-		Type      string `json:"type"`
-		ID        string `json:"id"`
-		Published string `json:"published"`
-		Title     string `json:"title,omitempty"`
-		Content   string `json:"content,omitempty"`
-		URL       string `json:"url,omitempty"`
-	}
-	items := make([]noteObject, len(notes))
+	items := make([]activity.Note, len(notes))
 	for i, note := range notes {
-		items[i] = noteObject{
+		items[i] = activity.Note{
 			Type:      activity.NoteType,
 			ID:        note.ID,
 			Published: note.Published.Format(activity.TimeFormat),
@@ -97,13 +89,7 @@ func (ao *ActivityOutbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	collection := struct {
-		Context  string       `json:"@context"`
-		Type     string       `json:"type"`
-		ID       string       `json:"id"`
-		NumItems int          `json:"numItems"`
-		Items    []noteObject `json:"items"`
-	}{
+	collection := activity.OrderedNoteCollection{
 		Context:  activity.Context,
 		Type:     activity.OrderedCollectionType,
 		ID:       ao.id,

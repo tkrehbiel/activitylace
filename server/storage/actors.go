@@ -17,7 +17,7 @@ type Actors interface {
 
 func (s *sqliteDatabase) FindActor(id string) (*Actor, error) {
 	var actor Actor
-	tx := s.db.Find(&actor, Actor{ID: id})
+	tx := s.db.First(&actor, Actor{ID: id})
 	if tx.Error == gorm.ErrRecordNotFound {
 		return nil, nil
 	} else if tx.Error != nil {

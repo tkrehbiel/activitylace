@@ -143,8 +143,9 @@ func NewService(cfg Config) ActivityService {
 		}
 
 		serverUser.inbox = ActivityInbox{
-			id:       path.Join(svc.meta.URL, fmt.Sprintf("%s/%s/inbox", page.SubPath, usercfg.Name)),
-			username: usercfg.Name,
+			id:        path.Join(svc.meta.URL, fmt.Sprintf("%s/%s/inbox", page.SubPath, usercfg.Name)),
+			ownerID:   serverUser.meta.UserID,
+			followers: store.(storage.Followers),
 		}
 
 		if err := serverUser.store.Open(); err != nil {

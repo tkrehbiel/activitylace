@@ -1,0 +1,15 @@
+{
+ "@context": "https://www.w3.org/ns/activitystreams",
+ "summary": "Sally followed John",
+ "type": "Follow",
+ "actor": {
+  "type": "Person",
+  "name": "Sally",
+  "id": "http://localhost/user/sally"
+ },
+ "object": {
+  "type": "Person",
+  "name": "John",
+  "id": "http://localhost:8080/activity/news"
+ }
+}

@@ -32,7 +32,7 @@ func (s *sqliteDatabase) GetLatestNotes(n int) (notes []Note, err error) {
 
 func (s *sqliteDatabase) FindNote(id string) (*Note, error) {
 	var note Note
-	tx := s.db.Find(&note, Note{ID: id})
+	tx := s.db.First(&note, Note{ID: id})
 	if tx.Error == gorm.ErrRecordNotFound {
 		return nil, nil
 	} else if tx.Error != nil {

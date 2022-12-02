@@ -21,7 +21,7 @@ type Database interface {
 type sqliteDatabase struct {
 	Actors
 	Notes
-	Follows
+	Followers
 	connection string
 	db         *gorm.DB
 	sqldb      *sql.DB

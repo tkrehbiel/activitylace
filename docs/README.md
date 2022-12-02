@@ -25,7 +25,7 @@ If this doesn't run on the same server, the blog server will have to redirect we
 
 ## Phase 1a (new)
 
-- Represent ActivityPub objects internally in a more efficient format. Only translate to and from ActivityPub when sending and receiving objects. (Make sure to keep a copy of the received json though.) The JSON-LD object concept is a terrible format for programmatically working with objects.
+- ~~Represent ActivityPub objects internally in a more efficient format. Only translate to and from ActivityPub when sending and receiving objects.~~ (done) (Make sure to keep a copy of the received json though.) The JSON-LD object concept is a terrible format for programmatically working with objects.
 
 ## Phase 2, Followers
 
