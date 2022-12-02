@@ -1,5 +1,18 @@
 package activity
 
+type Object struct {
+	Context interface{} `json:"@context,omitempty"`
+	Type    string      `json:"type"`
+	ID      string      `json:"id"`
+	To      []string    `json:"to,omitempty"`
+	BTo     []string    `json:"bto,omitempty"`
+	CC      []string    `json:"cc,omitempty"`
+	BCC     []string    `json:"bcc,omitempty"`
+	Actor   interface{} `json:"actor,omitempty"`
+	Object  interface{} `json:"object,omitempty"`
+	Target  interface{} `json:"target,omitempty"`
+}
+
 type Note struct {
 	Context   interface{} `json:"@context,omitempty"`
 	Type      string      `json:"type"`

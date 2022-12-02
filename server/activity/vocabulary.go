@@ -5,6 +5,7 @@ package activity
 const (
 	IDProperty        = "id"
 	PublishedProperty = "published"
+	TypeProperty      = "type"
 )
 
 const (

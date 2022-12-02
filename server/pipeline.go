@@ -18,6 +18,7 @@ import (
 type OutputPipeline struct {
 	client   http.Client
 	pipeline chan AsyncRequest
+	stop     chan bool
 }
 
 // AsyncRequest is an asynchronous request and a handler for the response
@@ -32,29 +33,38 @@ func (p *OutputPipeline) Send(r *http.Request, accept func(resp *http.Response))
 
 func (p *OutputPipeline) SendAndWait(r *http.Request, accept func(resp *http.Response)) {
 	resp, err := p.client.Do(r)
-	if err == nil {
+	if err == nil && accept != nil {
 		accept(resp)
 	}
 }
 
+// Run waits for channel messages and handles them.
+// Expected to be run in a goroutine.
 func (p *OutputPipeline) Run(ctx context.Context) error {
 	// Wait for context end or messages from the pipeline channel
 	select {
+	// case <-p.stop:
+	// 	return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	case msg := <-p.pipeline:
 		resp, err := p.client.Do(msg.Request)
-		if err == nil {
+		if err == nil && msg.Handler != nil {
 			msg.Handler(resp)
 		}
 	}
 	return nil
 }
 
+func (p *OutputPipeline) Stop() {
+	//p.stop <- true
+}
+
 func NewPipeline() OutputPipeline {
 	return OutputPipeline{
 		client:   http.Client{},
 		pipeline: make(chan AsyncRequest),
+		stop:     make(chan bool),
 	}
 }
 

@@ -65,8 +65,23 @@ func (ai *ActivityInbox) PostHTTP(w http.ResponseWriter, r *http.Request) {
 	case "Follow":
 		ai.Follow(w, act)
 	case "Undo":
-		telemetry.Trace("Undo")
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		if objectMap, ok := act.Object.(map[string]interface{}); ok {
+			switch objectMap[activity.TypeProperty] {
+			case activity.FollowType:
+				// Unmarshal the object to its own struct
+				var unfollow struct {
+					Object activity.Activity `json:"object"`
+				}
+				err := json.Unmarshal(jsonBytes, &unfollow)
+				if err != nil {
+					telemetry.Error(err, "unmarshalling Undo activity's Object [%s]", string(jsonBytes))
+				} else {
+					ai.Unfollow(w, act, unfollow.Object)
+				}
+			default:
+				w.WriteHeader(http.StatusMethodNotAllowed)
+			}
+		}
 	default:
 		// unrecognized Activity Type
 		telemetry.Trace("unrecognized activity type [%s] %s", act.Type, string(jsonBytes))
@@ -100,20 +115,21 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 
 	if act.ID == "" {
 		// No Follow ID provided. #ActivityPub does not describe what to do in this situation.
-		// We make one up by combining the follower and the followee.
+		// We reject these, because the ID is crucial for the ensuring Accept.
 		act.ID = strings.Join([]string{objectID, actorID}, "-")
 	}
 
-	existing, err := ai.followers.FindFollow(act.ID)
+	existing, err := ai.followers.FindFollow(actorID)
 	if err != nil {
 		message += " - rejected, database read error"
 		telemetry.Error(err, "database error")
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
 	if existing != nil {
 		// Already following, no need to do anything.
 		// #ActivityPub says nothing about what to do in this situation. Just winging it.
+		// TODO: Probably should go ahead and send an Accept anyway, in case the activity didn't finish.
 		message += " - already following"
 		w.WriteHeader(http.StatusOK)
 		return
@@ -122,11 +138,11 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 	// Save the new follower. We mark it as "pending" until we successfully
 	// send an Accept request back to the remote server.
 	follow := storage.Follow{
-		ID:         act.ID,
-		FollowerID: actorID,
-		Status:     "pending",
+		ID:            actorID,
+		RequestID:     act.ID,
+		RequestStatus: "pending",
 	}
-	if err := ai.followers.SaveFollow(&follow); err != nil {
+	if err := ai.followers.SaveFollow(follow); err != nil {
 		message += " - database write error"
 		telemetry.Error(err, "database error")
 	}
@@ -141,7 +157,10 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 	followingActor, err := ai.output.LookupActor(context.Background(), actorID)
 	if err != nil {
 		// Can't lookup the actor who's following, stop
+		// TODO: should remove the pending follower?
 		message += fmt.Sprintf(" - can't lookup follower: %s", err)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
 	}
 
 	// ActivityPub requires us to send an Accept response to the followee's inbox
@@ -182,8 +201,8 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 			message += " - accepted"
 			telemetry.Increment("accept_responses", 1)
 			// mark transaction was completed successfully
-			follow.Status = "accepted"
-			if err := ai.followers.SaveFollow(&follow); err != nil {
+			follow.RequestStatus = "accepted"
+			if err := ai.followers.SaveFollow(follow); err != nil {
 				// Bad time for a database error. This will leave the follow request
 				// marked as "pending" in our local database, but the remote server
 				// will believe the transaction was successful and they are following.
@@ -192,6 +211,112 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 			}
 		}
 	})
+
+	message += " - success"
+}
+
+func (ai *ActivityInbox) Unfollow(w http.ResponseWriter, undo activity.Activity, follow activity.Activity) {
+	telemetry.Increment("undo_requests", 1)
+
+	// The actor is the id of the person who wants to undo
+	actorID := parseID(follow.Actor)
+
+	// The object is the user that is to be followed. It should match the owner of the Inbox.
+	objectID := parseID(follow.Object)
+
+	var message = fmt.Sprintf("POST unfollow [%s] by [%s] at inbox [%s]", objectID, actorID, ai.id)
+	defer func() {
+		telemetry.Log(message)
+	}()
+
+	if undo.ID == "" {
+		// We really should have an ID, but #ActivityPub doesn't tell us what to do if we don't.
+		message += " - rejected, no undo ID"
+		w.WriteHeader(http.StatusBadRequest)
+	}
+
+	if objectID != ai.ownerID {
+		// Trying to follow someone other than the owner of this inbox, not allowed.
+		// #ActivityPub There is no information about what to do in this situation in the spec.
+		message += " - rejected, wrong inbox"
+		w.WriteHeader(http.StatusNotAcceptable)
+		return
+	}
+
+	if err := ai.followers.DeleteFollow(actorID); err != nil {
+		message += " - database delete error"
+		telemetry.Error(err, "database error")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+
+	// Now for the arduous process of sending an Accept back to the sender.
+	// We don't save the follower in our list until a successful Accept has been sent.
+
+	// Lookup the follower's inbox
+	followingActor, err := ai.output.LookupActor(context.Background(), actorID)
+	if err != nil {
+		// Can't lookup the actor who's following, stop
+		message += fmt.Sprintf(" - can't lookup follower: %s", err)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+
+	// ActivityPub requires us to send an Accept response to the followee's inbox
+	// https://www.w3.org/TR/activitypub/#follow-activity-inbox
+	message += " - sending Accept"
+	type undoFollow struct {
+		Type   string            `json:"type"`
+		ID     string            `json:"id"`
+		Actor  string            `json:"actor,omitempty"`
+		Object activity.Activity `json:"object,omitempty"`
+	}
+	acceptObject := struct {
+		Context string     `json:"@context"`
+		Type    string     `json:"type"`
+		Actor   string     `json:"actor,omitempty"`
+		Object  undoFollow `json:"object,omitempty"`
+	}{
+		Context: activity.Context,
+		Type:    activity.AcceptType,
+		Actor:   ai.ownerID,
+		Object: undoFollow{
+			// Recreate the basics of the information that was sent to us.
+			Type:  activity.UndoType,
+			ID:    undo.ID,
+			Actor: ai.ownerID,
+			Object: activity.Activity{
+				Type:   activity.FollowType,
+				Actor:  actorID,
+				Object: ai.ownerID,
+			},
+		},
+	}
+
+	b, err := json.Marshal(&acceptObject)
+	if err != nil {
+		message += " - can't send"
+		telemetry.Error(err, "marshalling Accept object")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+
+	body := bytes.NewBuffer(b)
+	r, err := http.NewRequest(http.MethodPost, followingActor.Inbox, body)
+	if err != nil {
+		message += " - can't send"
+		telemetry.Error(err, "creating Accept request")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+
+	// Finally, send the Accept request back to the sender.
+	// In this case we don't care to wait for a response.
+	// TODO: Send() doesn't work the way I want it to.
+	telemetry.Increment("accept_requests", 1)
+	ai.output.SendAndWait(r, nil)
 
 	message += " - success"
 }
