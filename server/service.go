@@ -88,6 +88,9 @@ func (s *ActivityService) Close() {
 
 func (s *ActivityService) ListenAndServe(ctx context.Context) error {
 	// Spawn RSS feed watcher goroutines
+	if s.Pipeline == nil {
+		panic("ActivityService doesn't have a Pipeline")
+	}
 	for i := range s.users {
 		go s.users[i].outbox.WatchRSS(ctx)
 	}
@@ -149,6 +152,7 @@ func NewService(cfg Config) ActivityService {
 			id:        path.Join(svc.meta.URL, fmt.Sprintf("%s/%s/inbox", page.SubPath, usercfg.Name)),
 			ownerID:   serverUser.meta.UserID,
 			followers: store.(storage.Followers),
+			pipeline:  svc.Pipeline,
 		}
 
 		if err := serverUser.store.Open(); err != nil {

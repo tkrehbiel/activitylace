@@ -70,9 +70,9 @@ func TestInbox_Follow(t *testing.T) {
 	var remoteID string
 
 	inbox := ActivityInbox{
-		id:      "test",
-		ownerID: id,
-		output:  &pipeline,
+		id:       "test",
+		ownerID:  id,
+		pipeline: pipeline,
 	}
 
 	// Simulate the remote inbox
@@ -153,9 +153,9 @@ func TestInbox_UnFollow(t *testing.T) {
 	var remoteID string
 
 	inbox := ActivityInbox{
-		id:      "test",
-		ownerID: id,
-		output:  &pipeline,
+		id:       "test",
+		ownerID:  id,
+		pipeline: pipeline,
 	}
 
 	// Simulate the remote inbox

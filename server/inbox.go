@@ -18,7 +18,7 @@ type ActivityInbox struct {
 	id        string
 	ownerID   string // id of the owner of the inbox
 	followers storage.Followers
-	output    *OutputPipeline
+	pipeline  *OutputPipeline
 }
 
 // GetHTTP handles GET requests to the inbox, which we don't do
@@ -44,6 +44,10 @@ func (ai *ActivityInbox) GetHTTP(w http.ResponseWriter, r *http.Request) {
 // This is where the bulk of handling communications from remote federated servers happens.
 // e.g. Follow requests will come in through here.
 func (ai *ActivityInbox) PostHTTP(w http.ResponseWriter, r *http.Request) {
+	if ai.pipeline == nil {
+		panic("ActivityInbox pipeline missing")
+	}
+
 	telemetry.Request(r, "ActivityInbox.ServeHTTP %s", ai.id)
 	telemetry.Increment("post_requests", 1)
 
@@ -154,7 +158,7 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 	// We don't save the follower in our list until a successful Accept has been sent.
 
 	// Lookup the follower's inbox
-	followingActor, err := ai.output.LookupActor(context.Background(), actorID)
+	followingActor, err := ai.pipeline.LookupActor(context.Background(), actorID)
 	if err != nil {
 		// Can't lookup the actor who's following, stop
 		// TODO: should remove the pending follower?
@@ -196,7 +200,7 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 
 	// Finally, send the Accept request back to the sender
 	telemetry.Increment("accept_requests", 1)
-	ai.output.SendAndWait(r, func(resp *http.Response) {
+	ai.pipeline.SendAndWait(r, func(resp *http.Response) {
 		if resp.StatusCode == http.StatusOK {
 			message += " - accepted"
 			telemetry.Increment("accept_responses", 1)
@@ -216,6 +220,10 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 }
 
 func (ai *ActivityInbox) Unfollow(w http.ResponseWriter, undo activity.Activity, follow activity.Activity) {
+	if ai.pipeline == nil {
+		panic("ActivityInbox pipeline missing")
+	}
+
 	telemetry.Increment("undo_requests", 1)
 
 	// The actor is the id of the person who wants to undo
@@ -256,7 +264,7 @@ func (ai *ActivityInbox) Unfollow(w http.ResponseWriter, undo activity.Activity,
 	// We don't save the follower in our list until a successful Accept has been sent.
 
 	// Lookup the follower's inbox
-	followingActor, err := ai.output.LookupActor(context.Background(), actorID)
+	followingActor, err := ai.pipeline.LookupActor(context.Background(), actorID)
 	if err != nil {
 		// Can't lookup the actor who's following, stop
 		message += fmt.Sprintf(" - can't lookup follower: %s", err)
@@ -316,7 +324,7 @@ func (ai *ActivityInbox) Unfollow(w http.ResponseWriter, undo activity.Activity,
 	// In this case we don't care to wait for a response.
 	// TODO: Send() doesn't work the way I want it to.
 	telemetry.Increment("accept_requests", 1)
-	ai.output.SendAndWait(r, nil)
+	ai.pipeline.SendAndWait(r, nil)
 
 	message += " - success"
 }

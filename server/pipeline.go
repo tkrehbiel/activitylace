@@ -68,7 +68,9 @@ func (p *OutputPipeline) Stop() {
 
 func NewPipeline() *OutputPipeline {
 	return &OutputPipeline{
-		client:   http.Client{},
+		client: http.Client{
+			Timeout: time.Second * 5,
+		},
 		pipeline: make(chan AsyncRequest),
 		stop:     make(chan bool),
 	}
