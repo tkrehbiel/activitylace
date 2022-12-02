@@ -68,7 +68,7 @@ func main() {
 	svc := server.NewService(cfg)
 
 	// Startup the output pipeline to wait for messages to send
-	go svc.Output.Run(context.Background())
+	go svc.Pipeline.Run(context.Background())
 
 	// Startup the service to listen for http requests
 	go func() {

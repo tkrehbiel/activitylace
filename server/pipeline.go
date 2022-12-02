@@ -28,6 +28,12 @@ type AsyncRequest struct {
 }
 
 func (p *OutputPipeline) Send(r *http.Request, accept func(resp *http.Response)) {
+	if p == nil {
+		panic("no pipeline")
+	}
+	if p.pipeline == nil {
+		panic("no pipeline channel")
+	}
 	p.pipeline <- AsyncRequest{Request: r, Handler: accept}
 }
 
@@ -60,8 +66,8 @@ func (p *OutputPipeline) Stop() {
 	//p.stop <- true
 }
 
-func NewPipeline() OutputPipeline {
-	return OutputPipeline{
+func NewPipeline() *OutputPipeline {
+	return &OutputPipeline{
 		client:   http.Client{},
 		pipeline: make(chan AsyncRequest),
 		stop:     make(chan bool),
