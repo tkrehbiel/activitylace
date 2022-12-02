@@ -183,15 +183,7 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 		},
 	}
 
-	b, err := json.Marshal(&acceptObject)
-	if err != nil {
-		message += " - can't send"
-		telemetry.Error(err, "marshalling Accept object")
-		return
-	}
-
-	body := bytes.NewBuffer(b)
-	r, err := http.NewRequest(http.MethodPost, followingActor.Inbox, body)
+	r, err := ai.pipeline.ActivityPostRequest(followingActor.Inbox, &acceptObject)
 	if err != nil {
 		message += " - can't send"
 		telemetry.Error(err, "creating Accept request")
@@ -303,16 +295,7 @@ func (ai *ActivityInbox) Unfollow(w http.ResponseWriter, undo activity.Activity,
 		},
 	}
 
-	b, err := json.Marshal(&acceptObject)
-	if err != nil {
-		message += " - can't send"
-		telemetry.Error(err, "marshalling Accept object")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		return
-	}
-
-	body := bytes.NewBuffer(b)
-	r, err := http.NewRequest(http.MethodPost, followingActor.Inbox, body)
+	r, err := ai.pipeline.ActivityPostRequest(followingActor.Inbox, &acceptObject)
 	if err != nil {
 		message += " - can't send"
 		telemetry.Error(err, "creating Accept request")

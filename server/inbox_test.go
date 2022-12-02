@@ -77,6 +77,7 @@ func TestInbox_Follow(t *testing.T) {
 
 	// Simulate the remote inbox
 	remoteInbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Contains(t, r.Header.Get("Accept"), "json")
 		w.WriteHeader(http.StatusOK)
 		var act activity.Activity
 		decoder := json.NewDecoder(r.Body)
@@ -89,6 +90,7 @@ func TestInbox_Follow(t *testing.T) {
 
 	// Simulate the remote actor URL
 	remoteActor := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Contains(t, r.Header.Get("Accept"), "json")
 		actor := activity.Actor{
 			Context: activity.Context,
 			Type:    activity.PersonType,
@@ -160,6 +162,7 @@ func TestInbox_UnFollow(t *testing.T) {
 
 	// Simulate the remote inbox
 	remoteInbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Contains(t, r.Header.Get("Accept"), "json")
 		w.WriteHeader(http.StatusOK)
 		var act activity.Activity
 		decoder := json.NewDecoder(r.Body)
@@ -171,6 +174,7 @@ func TestInbox_UnFollow(t *testing.T) {
 
 	// Simulate the remote actor URL
 	remoteActor := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Contains(t, r.Header.Get("Accept"), "json")
 		actor := activity.Actor{
 			Context: activity.Context,
 			Type:    activity.PersonType,

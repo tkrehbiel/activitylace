@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -76,6 +77,20 @@ func NewPipeline() *OutputPipeline {
 	}
 }
 
+func (s *OutputPipeline) ActivityPostRequest(url string, v any) (*http.Request, error) {
+	body, err := json.Marshal(v)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling json from object: %w", err)
+	}
+	reader := bytes.NewBuffer(body)
+	r, err := http.NewRequest(http.MethodPost, url, reader)
+	if err != nil {
+		return nil, fmt.Errorf("creating ActivityPub request: %w", err)
+	}
+	r.Header.Set("Accept", activity.ContentType)
+	return r, nil
+}
+
 // LookupActor finds the remote endpoint for the actor ID, which is assumed to be a URL
 // Blocks until we get a response or the context is cancelled or times out
 func (s *OutputPipeline) LookupActor(ctx context.Context, id string) (*activity.Actor, error) {
@@ -84,6 +99,7 @@ func (s *OutputPipeline) LookupActor(ctx context.Context, id string) (*activity.
 	if err != nil {
 		return nil, err
 	}
+	r.Header.Set("Accept", activity.ContentType) // make sure we get a json response
 
 	// TODO: maybe support webfingering an acct:x@y resource too
 	// TODO: make this more asynchronous, and (optionally?) cache the results locally
@@ -97,7 +113,7 @@ func (s *OutputPipeline) LookupActor(ctx context.Context, id string) (*activity.
 			done <- fmt.Errorf("reading response bytes: %w", err)
 		}
 		if err := json.Unmarshal(jsonBytes, &actor); err != nil {
-			done <- fmt.Errorf("unmarshaling json: %w", err)
+			done <- fmt.Errorf("unmarshaling json [%s]: %w", string(jsonBytes), err)
 		}
 		done <- nil // just says we're done without error
 	})

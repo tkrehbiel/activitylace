@@ -10,7 +10,7 @@ const (
 
 const (
 	Context     = "https://www.w3.org/ns/activitystreams"
-	ContentType = `application/activity+json; profile="https://www.w3.org/ns/activitystreams"`
+	ContentType = `application/ld+json; profile="https://www.w3.org/ns/activitystreams"`
 )
 
 // ActivityPub object types
