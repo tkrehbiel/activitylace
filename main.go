@@ -65,10 +65,14 @@ func main() {
 		cfg.Server.PrivateKey = *privCert
 	}
 
-	srv := server.NewService(cfg)
+	svc := server.NewService(cfg)
 
+	// Startup the output pipeline to wait for messages to send
+	go svc.Output.Run(context.Background())
+
+	// Startup the service to listen for http requests
 	go func() {
-		err := srv.ListenAndServe(context.Background())
+		err := svc.ListenAndServe(context.Background())
 		if err != nil && err != http.ErrServerClosed {
 			telemetry.Error(err, "while listening")
 		}
@@ -81,7 +85,7 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
 	defer cancel()
-	srv.Server.Shutdown(ctx)
-	srv.Close()
+	svc.Server.Shutdown(ctx)
+	svc.Close()
 	telemetry.Log("stopping activitylace cleanly")
 }

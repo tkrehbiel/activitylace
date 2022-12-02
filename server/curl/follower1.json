@@ -1,7 +1,6 @@
 {
  "@context": "https://www.w3.org/ns/activitystreams",
- "summary": "Sally followed John",
  "type": "Follow",
- "actor": "http://localhost/user/sally",
+ "actor": "http://localhost/user/fred",
  "object": "http://localhost:8080/activity/news"
 }

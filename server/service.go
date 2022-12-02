@@ -20,6 +20,7 @@ import (
 type ActivityService struct {
 	Config Config
 	Server http.Server
+	Output OutputPipeline
 	router *mux.Router
 	meta   page.MetaData
 	users  []ActivityUser
@@ -101,6 +102,7 @@ func (s *ActivityService) ListenAndServe(ctx context.Context) error {
 // NewService creates an http service to listen for ActivityPub requests
 func NewService(cfg Config) ActivityService {
 	svc := ActivityService{
+		Output: NewPipeline(),
 		Config: cfg,
 		router: mux.NewRouter(),
 		users:  make([]ActivityUser, 0),

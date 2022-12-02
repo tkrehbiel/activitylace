@@ -14,6 +14,7 @@ const (
 
 // ActivityPub object types
 const (
+	PersonType            = "Person"
 	NoteType              = "Note"
 	LinkType              = "Link"
 	OrderedCollectionType = "OrderedCollection"
@@ -21,6 +22,8 @@ const (
 
 // ActivityPub activity types
 const (
+	AcceptType = "Accept"
+	RejectType = "Reject"
 	FollowType = "Follow"
 	UndoType   = "Undo"
 )

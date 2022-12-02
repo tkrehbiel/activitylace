@@ -1,6 +1,8 @@
 package server
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +18,7 @@ type ActivityInbox struct {
 	id        string
 	ownerID   string // id of the owner of the inbox
 	followers storage.Followers
+	output    *OutputPipeline
 }
 
 // GetHTTP handles GET requests to the inbox, which we don't do
@@ -60,7 +63,7 @@ func (ai *ActivityInbox) PostHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch act.Type {
 	case "Follow":
-		ai.Follow(w, act, jsonBytes)
+		ai.Follow(w, act)
 	case "Undo":
 		telemetry.Trace("Undo")
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -71,18 +74,16 @@ func (ai *ActivityInbox) PostHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity, jsonBytes []byte) {
-	// Expecting:
-	// actor = account that wants to follow
-	// object = account to follow
+func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
+	// Yeesh this is more complex than I thought it would be
 
 	telemetry.Increment("follow_requests", 1)
 
 	// The actor is the id of the person who wants to follow
-	actorID := getKey(act.Actor, "id")
+	actorID := parseID(act.Actor)
 
 	// The object is the user that is to be followed. It should match the owner of the Inbox.
-	objectID := getKey(act.Object, "id")
+	objectID := parseID(act.Object)
 
 	var message = fmt.Sprintf("POST follow [%s] by [%s] at inbox [%s]", objectID, actorID, ai.id)
 	defer func() {
@@ -98,7 +99,7 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity, js
 	}
 
 	if act.ID == "" {
-		// No ID provided. #ActivityPub does not describe what to do in this situation.
+		// No Follow ID provided. #ActivityPub does not describe what to do in this situation.
 		// We make one up by combining the follower and the followee.
 		act.ID = strings.Join([]string{objectID, actorID}, "-")
 	}
@@ -107,10 +108,9 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity, js
 	if err != nil {
 		message += " - rejected, database read error"
 		telemetry.Error(err, "database error")
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusOK)
 		return
 	}
-	// TODO: why is this always finding an existing row even if the table is empty??
 	if existing != nil {
 		// Already following, no need to do anything.
 		// #ActivityPub says nothing about what to do in this situation. Just winging it.
@@ -119,23 +119,84 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity, js
 		return
 	}
 
+	// Save the new follower. We mark it as "pending" until we successfully
+	// send an Accept request back to the remote server.
 	follow := storage.Follow{
 		ID:         act.ID,
 		FollowerID: actorID,
+		Status:     "pending",
 	}
 	if err := ai.followers.SaveFollow(&follow); err != nil {
-		message += " - rejected, database write error"
+		message += " - database write error"
 		telemetry.Error(err, "database error")
-		w.WriteHeader(http.StatusInternalServerError)
+	}
+
+	// At this point we can indicate a successful status OK
+	w.WriteHeader(http.StatusOK)
+
+	// Now for the arduous process of sending an Accept back to the sender.
+	// We don't save the follower in our list until a successful Accept has been sent.
+
+	// Lookup the follower's inbox
+	followingActor, err := ai.output.LookupActor(context.Background(), actorID)
+	if err != nil {
+		// Can't lookup the actor who's following, stop
+		message += fmt.Sprintf(" - can't lookup follower: %s", err)
+	}
+
+	// ActivityPub requires us to send an Accept response to the followee's inbox
+	// https://www.w3.org/TR/activitypub/#follow-activity-inbox
+	message += " - sending Accept"
+	acceptObject := activity.Activity{
+		Context: activity.Context,
+		Type:    activity.AcceptType,
+		Actor:   ai.ownerID,
+		Object: activity.Activity{
+			// Return the information that was sent to us
+			Type:   activity.FollowType,
+			ID:     act.ID,
+			Actor:  actorID,
+			Object: objectID,
+		},
+	}
+
+	b, err := json.Marshal(&acceptObject)
+	if err != nil {
+		message += " - can't send"
+		telemetry.Error(err, "marshalling Accept object")
 		return
 	}
 
-	// The #ActivityPub spec isn't telling me what to return on a successful follow, so I guess just OK?
+	body := bytes.NewBuffer(b)
+	r, err := http.NewRequest(http.MethodPost, followingActor.Inbox, body)
+	if err != nil {
+		message += " - can't send"
+		telemetry.Error(err, "creating Accept request")
+		return
+	}
+
+	// Finally, send the Accept request back to the sender
+	telemetry.Increment("accept_requests", 1)
+	ai.output.SendAndWait(r, func(resp *http.Response) {
+		if resp.StatusCode == http.StatusOK {
+			message += " - accepted"
+			telemetry.Increment("accept_responses", 1)
+			// mark transaction was completed successfully
+			follow.Status = "accepted"
+			if err := ai.followers.SaveFollow(&follow); err != nil {
+				// Bad time for a database error. This will leave the follow request
+				// marked as "pending" in our local database, but the remote server
+				// will believe the transaction was successful and they are following.
+				message += " - database write error"
+				telemetry.Error(err, "database error")
+			}
+		}
+	})
+
 	message += " - success"
-	w.WriteHeader(http.StatusOK)
 }
 
-func getKey(v interface{}, key string) (val string) {
+func parseID(v interface{}) (val string) {
 	// Rather annoyingly, JSON-LD parameters could be a simple string or they can be expansive maps,
 	// so we should be prepared to handle either situation. A valid JSON-LD object could be very complex,
 	// which, if I can get on my soapbox for a moment, is a deficiency of the [ActivityPub] spec.
@@ -149,7 +210,7 @@ func getKey(v interface{}, key string) (val string) {
 	case map[string]interface{}:
 		// The data is a map, so we need to retrieve one of the keys.
 		// e.g. { "actor": { "name": "Alice", "id": "https://id" } }
-		switch s := t[key].(type) {
+		switch s := t["id"].(type) {
 		case string:
 			val = s
 		case fmt.Stringer:
@@ -157,4 +218,21 @@ func getKey(v interface{}, key string) (val string) {
 		}
 	}
 	return val
+}
+
+func readerUnmarshal(r io.Reader, v any) {
+	decoder := json.NewDecoder(r)
+	decoder.Decode(&v)
+}
+
+func jsonBytes(v any) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+func jsonReader(v any) io.Reader {
+	return bytes.NewBuffer(jsonBytes(v))
 }

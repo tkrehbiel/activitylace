@@ -5,6 +5,7 @@ import "gorm.io/gorm"
 type Follow struct {
 	ID         string
 	FollowerID string
+	Status     string // pending or accepted
 }
 
 type Followers interface {
