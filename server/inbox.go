@@ -53,7 +53,7 @@ func (ai *ActivityInbox) PostHTTP(w http.ResponseWriter, r *http.Request) {
 
 	var act activity.Activity
 	if err := json.Unmarshal(jsonBytes, &act); err != nil {
-		telemetry.Error(err, "unmarshaling json [%s]", string(jsonBytes))
+		telemetry.Error(err, "unmarshaling activity [%s]", string(jsonBytes))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
