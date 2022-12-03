@@ -23,6 +23,12 @@ type Note struct {
 	URL       string      `json:"url"` // plain url string
 }
 
+type publicKey struct {
+	ID    string `json:"id"`
+	Owner string `json:"owner"`
+	Key   string `json:"publicKeyPem"`
+}
+
 type Actor struct {
 	Context   interface{} `json:"@context,omitempty"`
 	Type      string      `json:"type"`
@@ -33,4 +39,5 @@ type Actor struct {
 	Followers string      `json:"followers,omitempty"`
 	Liked     string      `json:"liked,omitempty"`
 	Preferred string      `json:"preferredUsername,omitempty"`
+	PublicKey publicKey   `json:"publicKey,omitempty"`
 }

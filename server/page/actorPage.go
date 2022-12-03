@@ -7,7 +7,10 @@ var ActorEndpoint = StaticPage{
 	ContentType: "application/activity+json",
 	Template: `
 {
-	"@context": "https://www.w3.org/ns/activitystreams",
+	"@context": [
+      "https://www.w3.org/ns/activitystreams",
+      "https://w3id.org/security/v1"
+  	],
 	"type": "{{ .UserType }}",
 	"id": "{{ .UserID }}",
 	"url": "{{ .UserProfileURL }}",

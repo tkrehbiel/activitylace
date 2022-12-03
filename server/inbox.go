@@ -218,6 +218,8 @@ func (f *FollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error
 		Type:    f.responseType,
 		ID:      acceptID, // Pleroma requires an id
 		Actor:   f.localID,
+		To:      []string{f.remoteID}, // Pleroma seems to require a to array
+		CC:      make([]string, 0),    // Pleroma seems to require a cc array
 		Object: activity.Activity{
 			// Return the information that was sent to us
 			Type:   activity.FollowType,
@@ -225,8 +227,6 @@ func (f *FollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error
 			Actor:  f.remoteID,
 			Object: f.localID,
 		},
-		To: []string{f.remoteID}, // Pleroma seems to require a to array
-		CC: make([]string, 0),    // Pleroma seems to require a cc array
 	}
 
 	r, err := pipeline.ActivityPostRequest(remote.Inbox, &acceptObject)
@@ -357,6 +357,8 @@ func (f *UnfollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, err
 		Type:    activity.AcceptType,
 		ID:      acceptID,
 		Actor:   f.localID,
+		To:      []string{f.remoteID}, // Pleroma seems to require a to array
+		CC:      make([]string, 0),    // Pleroma seems to require a cc array
 		Object: undoFollow{
 			// Recreate the basics of the information that was sent to us.
 			Type:  activity.UndoType,
@@ -435,14 +437,12 @@ func jsonReader(v any) io.Reader {
 func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error {
 	prefs := []httpsig.Algorithm{httpsig.RSA_SHA256}
 	digestAlgorithm := httpsig.DigestSha256
-	// The "Date" and "Digest" headers must already be set on r, as well as r.URL.
-	headersToSign := []string{httpsig.RequestTarget, "date", "host"}
+	headersToSign := []string{httpsig.RequestTarget, "digest", "date", "host"}
 	signer, _, err := httpsig.NewSigner(prefs, digestAlgorithm, headersToSign, httpsig.Signature, int64(time.Hour))
 	if err != nil {
 		return err
 	}
-	// To sign the digest, we need to give the signer a copy of the body...
-	// ...but it is optional, no digest will be signed if given "nil"
+	// To sign the digest, we need to give the signer a copy of the body
 	body, _ := io.ReadAll(r.Body)
 	defer r.Body.Close()
 	r.Body = io.NopCloser(bytes.NewBuffer(body)) // replace body since we read it
