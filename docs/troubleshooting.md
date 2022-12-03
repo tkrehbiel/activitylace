@@ -23,7 +23,9 @@ ssl_certificate_key /etc/letsencrypt/live/___/privkey.pem;
 
 ## Mastodon gives up after Webfinger too
 
-Resolution: This was caused by [misspelling (actually mis-casing) `preferredUsername`](https://github.com/tkrehbiel/activitylace/commit/8efbefeec5b58cc7e5750a40c6a98d9f62179f10) in the Actor object response. It's case-sensitive. Mastodon takes the `preferredUsername` as canonical, and if it's misspelled, it tries to use an empty string as the username and everything blows up.
+Resolution: This was caused by [misspelling (actually mis-casing) `preferredUsername`](https://github.com/tkrehbiel/activitylace/commit/8efbefeec5b58cc7e5750a40c6a98d9f62179f10) in the Actor object response. It's case-sensitive. Mastodon takes the `preferredUsername` as canonical, and if it's misspelled or presumably missing, it tries to use an empty string as the username and everything blows up.
+
+Note: `preferredUsername` is NOT a required field in ActivityPub. So right off the bat, Mastodon is not ActivityPub compliant.
 
 ## Implementation Note
 
@@ -39,13 +41,28 @@ Resolution: _Apparently_ you have to send an Accept activity back to the source 
 
 Server kept hanging when trying to send an Accept back to the origin after receiving a Follow request.
 
-Resolution: Oh! I'm dumb. I think this is because I was sending out a new web request (and trying to wait for it to return) in the middle of handling the follow request. So I need to queue the Accept to run elsewhere. Duh.
+Resolution: Oh! I'm dumb. This is a golang issue. I was sending out a new web request (and trying to wait for it to return) in the middle of the follow web handler. So I need to queue the Accept to run at a later time. Duh.
 
-## Pleroma returns 400 from Accept, Mastodon returns 401 from Accept
+## Pleroma returns 400 from Accept
 
-On sending the Accept activity to the remote server after receiving a Follow activity, an HTTP error is returned. Pleroma returns a 400 Bad Request, Mastodon returns a 401 Unauthorized.
+On sending the Accept activity to the remote server after receiving a Follow activity, HTTP errors are returned. Pleroma returns a 400 Bad Request, Mastodon returns a 401 Unauthorized.
+
+Theory: Signatures not implemented? Doesn't seem to be the case for Pleroma. I see no error messages in the Pleroma log indicating invalid signatures. (I also see no errors clearly explaining why it failed.)
+
+Pleroma [seems to require](https://git.pleroma.social/pleroma/pleroma/-/blob/develop/lib/pleroma/web/activity_pub/object_validators/accept_reject_validator.ex#L32) `to` and `cc` fields in the Accept object, which makes no sense whatsoever. In any case, including them didn't fix the 400 error.
+
+Pleroma _apparently_ fetches the remote following collection in the process of its Follow logic??
+
+```
+Dec  3 03:34:42 localhost pleroma: request_id=Fy0rJt2ffaarr_8AloWB [debug] Fetching object https://user/following via AP
+Dec  3 03:34:42 localhost pleroma: request_id=Fy0rJt2ffaarr_8AloWB [error] Follower/Following counter update for https://user failed.#012{:error, "Object has been deleted"}
+Dec  3 03:34:42 localhost pleroma[167754]: 03:34:42.843 request_id=Fy0rJt2ffaarr_8AloWB [error] Follower/Following counter update for https://user failed.
+```
+
+Maybe a following/follower collection implemention is required?
+
+## Mastodon returns 401 from Accept
+
+On sending the Accept activity to the remote server after receiving a Follow activity, Mastodon returns a 401 Unauthorized.
 
 Theory: Signatures not implemented?
-
-Pleroma [seems to require](https://git.pleroma.social/pleroma/pleroma/-/blob/develop/lib/pleroma/web/activity_pub/object_validators/accept_reject_validator.ex#L32) `to` and `cc` fields in the Accept object, which makes no sense whatsoever.
-

@@ -219,8 +219,8 @@ func (f *FollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error
 			Actor:  f.remoteID,
 			Object: f.localID,
 		},
-		To: make([]string, 0), // Pleroma inexplicably requires an empty to array
-		CC: make([]string, 0), // Pleroma inexplicably requires an empty cc array
+		To: []string{f.remoteID}, // Pleroma seems to require a to array
+		CC: make([]string, 0),    // Pleroma seems to require a cc array
 	}
 
 	r, err := pipeline.ActivityPostRequest(remote.Inbox, &acceptObject)
