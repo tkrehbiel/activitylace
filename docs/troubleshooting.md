@@ -40,3 +40,12 @@ Resolution: _Apparently_ you have to send an Accept activity back to the source 
 Server kept hanging when trying to send an Accept back to the origin after receiving a Follow request.
 
 Resolution: Oh! I'm dumb. I think this is because I was sending out a new web request (and trying to wait for it to return) in the middle of handling the follow request. So I need to queue the Accept to run elsewhere. Duh.
+
+## Pleroma returns 400 from Accept, Mastodon returns 401 from Accept
+
+On sending the Accept activity to the remote server after receiving a Follow activity, an HTTP error is returned. Pleroma returns a 400 Bad Request, Mastodon returns a 401 Unauthorized.
+
+Theory: Signatures not implemented?
+
+Pleroma [seems to require](https://git.pleroma.social/pleroma/pleroma/-/blob/develop/lib/pleroma/web/activity_pub/object_validators/accept_reject_validator.ex#L32) `to` and `cc` fields in the Accept object, which makes no sense whatsoever.
+
