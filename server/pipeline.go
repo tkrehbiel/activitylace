@@ -100,6 +100,7 @@ func (s *OutputPipeline) ActivityPostRequest(url string, v any) (*http.Request, 
 	if err != nil {
 		return nil, fmt.Errorf("marshaling json from object: %w", err)
 	}
+	telemetry.Trace("creating request body %s", string(body))
 	reader := bytes.NewBuffer(body)
 	r, err := http.NewRequest(http.MethodPost, url, reader)
 	if err != nil {
