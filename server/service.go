@@ -161,7 +161,7 @@ func NewService(cfg Config) ActivityService {
 				continue
 			}
 
-			key, err := x509.ParsePKCS1PrivateKey(p.Bytes)
+			key, err := x509.ParsePKCS8PrivateKey(p.Bytes)
 			if err != nil {
 				telemetry.Error(err, "parsing private key file [%s]", usercfg.PrivKeyFile)
 				continue
