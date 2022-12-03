@@ -8,6 +8,6 @@ type Activity struct {
 	Actor   interface{} `json:"actor,omitempty"`
 	Object  interface{} `json:"object,omitempty"`
 	Target  interface{} `json:"target,omitempty"`
-	To      []string    `json:"to"` // Pleroma requires this
-	CC      []string    `json:"cc"` // Pleroma requires this
+	To      []string    `json:"to,omitempty"` // Pleroma requires this
+	CC      []string    `json:"cc,omitempty"` // Pleroma requires this
 }
