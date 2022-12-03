@@ -504,9 +504,13 @@ func (ai *ActivityInbox) GetActorPublicKey(id string) *x509.Certificate {
 	}
 	pubKeyPem := actor.PublicKey.Key
 	der, _ := pem.Decode([]byte(pubKeyPem))
+	if der == nil {
+		telemetry.Error(nil, "can't decode pem [%s]", pubKeyPem)
+		return nil
+	}
 	cert, err := x509.ParseCertificate(der.Bytes)
 	if err != nil {
-		telemetry.Error(err, "parsing public key")
+		telemetry.Error(err, "parsing public key [%s]", pubKeyPem)
 		return nil
 	}
 	return cert

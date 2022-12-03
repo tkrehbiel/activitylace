@@ -56,7 +56,11 @@ func Trace(format string, args ...any) {
 }
 
 func Error(err error, format string, args ...any) {
-	data.logger.Println("ERROR", fmt.Sprintf(format, args...), fmt.Sprintf("[%s]", err))
+	if err != nil {
+		data.logger.Println("ERROR", fmt.Sprintf(format, args...), fmt.Sprintf("[%s]", err))
+	} else {
+		data.logger.Println("ERROR", fmt.Sprintf(format, args...))
+	}
 	Increment("errors", 1)
 }
 
