@@ -207,8 +207,8 @@ func (f *FollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error
 			Actor:  f.remoteID,
 			Object: f.localID,
 		},
-		To: []string{}, // Pleroma inexplicably requires an empty to array
-		CC: []string{}, // Pleroma inexplicably requires an empty cc array
+		To: make([]string, 0), // Pleroma inexplicably requires an empty to array
+		CC: make([]string, 0), // Pleroma inexplicably requires an empty cc array
 	}
 
 	r, err := pipeline.ActivityPostRequest(remote.Inbox, &acceptObject)
@@ -315,16 +315,16 @@ func (f *UnfollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, err
 		ID     string            `json:"id"`
 		Actor  string            `json:"actor,omitempty"`
 		Object activity.Activity `json:"object,omitempty"`
-		To     []string          `json:"to,omitempty"`
-		CC     []string          `json:"cc,omitempty"`
+		To     []string          `json:"to"`
+		CC     []string          `json:"cc"`
 	}
 	acceptObject := struct {
 		Context string     `json:"@context"`
 		Type    string     `json:"type"`
 		Actor   string     `json:"actor,omitempty"`
 		Object  undoFollow `json:"object,omitempty"`
-		To      []string   `json:"to,omitempty"`
-		CC      []string   `json:"cc,omitempty"`
+		To      []string   `json:"to"`
+		CC      []string   `json:"cc"`
 	}{
 		Context: activity.Context,
 		Type:    activity.AcceptType,
