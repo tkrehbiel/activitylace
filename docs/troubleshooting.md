@@ -59,7 +59,7 @@ Dec  3 03:34:42 localhost pleroma: request_id=Fy0rJt2ffaarr_8AloWB [error] Follo
 Dec  3 03:34:42 localhost pleroma[167754]: 03:34:42.843 request_id=Fy0rJt2ffaarr_8AloWB [error] Follower/Following counter update for https://user failed.
 ```
 
-Maybe a following/follower collection implemention is required?
+Maybe a following/follower collection implemention is required? Still might be a signature though.
 
 ## Mastodon returns 401 from Accept
 

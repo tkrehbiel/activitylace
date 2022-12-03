@@ -70,7 +70,6 @@ func (s *MultiStaticPage) Add(username string, meta MetaData) {
 
 func (s MultiStaticPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// This one specifically uses the resource query parameter to lookup webfinger resources.
-	telemetry.Request(r, "MultiStaticPage.ServeHTTP")
 	resource := r.URL.Query().Get("resource")
 	if resource != "" {
 		matches := acctRegex.FindSubmatch([]byte(resource))

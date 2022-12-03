@@ -36,10 +36,11 @@ func (m MetaData) ProfileURL(name string) string {
 
 func (m MetaData) NewUserMetaData(name string) UserMetaData {
 	return UserMetaData{
-		MetaData:       m,
-		UserName:       name,
-		UserID:         m.ActorURL(name),
-		UserProfileURL: m.ProfileURL(name),
+		MetaData:        m,
+		UserName:        name,
+		UserID:          m.ActorURL(name),
+		UserProfileURL:  m.ProfileURL(name),
+		UserPublicKeyID: fmt.Sprintf("%s#main-key", m.ActorURL(name)),
 	}
 }
 
@@ -62,6 +63,8 @@ type UserMetaData struct {
 	AvatarURL       string
 	AvatarWidth     int
 	AvatarHeight    int
+	UserPublicKeyID string
+	UserPublicKey   string
 	LatestNotes     []activity.Note
 }
 

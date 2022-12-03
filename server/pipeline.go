@@ -18,6 +18,7 @@ import (
 // The idea is to be able to queue up a large number of requests to send staggered over time, rather than all at once.
 // (The rate limiting is not yet implemented.)
 type OutputPipeline struct {
+	host      string
 	client    http.Client
 	pipeline  chan QueueHandler
 	waitGroup sync.WaitGroup
@@ -46,8 +47,10 @@ func (p *OutputPipeline) Flush() {
 }
 
 func (p *OutputPipeline) SendAndWait(r *http.Request, accept func(resp *http.Response)) {
+	telemetry.Request(r, "outgoing")
 	resp, err := p.client.Do(r)
 	if err == nil && accept != nil {
+		telemetry.Response(resp, "%s", r.URL)
 		accept(resp)
 	}
 }
@@ -70,10 +73,12 @@ func (p *OutputPipeline) Run(ctx context.Context) error {
 			if err != nil {
 				telemetry.Error(err, "pipeline queue, getting request")
 			} else {
+				telemetry.Request(r, "outgoing")
 				resp, err := p.client.Do(r)
 				if err != nil {
 					telemetry.Error(err, "pipeline queue, getting response")
 				} else {
+					telemetry.Response(resp, "%s", r.URL)
 					handler.Receive(resp)
 				}
 				p.waitGroup.Done()
@@ -107,6 +112,8 @@ func (s *OutputPipeline) ActivityPostRequest(url string, v any) (*http.Request, 
 		return nil, fmt.Errorf("creating ActivityPub request: %w", err)
 	}
 	r.Header.Set("Accept", activity.ContentType)
+	r.Header.Set("Host", s.host)
+	r.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
 	return r, nil
 }
 

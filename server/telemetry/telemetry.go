@@ -3,7 +3,9 @@
 package telemetry
 
 import (
+	"bytes"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -60,7 +62,58 @@ func Error(err error, format string, args ...any) {
 
 // Request logs essential information about an HTTP request
 func Request(r *http.Request, format string, args ...any) {
-	data.logger.Println(fmt.Sprintf(format, args...), r.Method, r.URL)
+	headers := make([]string, 0)
+	for k, v := range r.Header {
+		s := fmt.Sprintf("%s: %s", k, strings.Join(v, ", "))
+		headers = append(headers, s)
+	}
+	s := strings.Join(headers, " | ")
+
+	if r.Body != nil {
+		buf, err := ioutil.ReadAll(r.Body)
+		defer r.Body.Close()
+		if err != nil {
+			s += ", error reading body"
+		} else if len(buf) > 0 {
+			s += fmt.Sprintf(", body:%s", string(buf))
+		} else {
+			s += ", no body"
+		}
+		reader := ioutil.NopCloser(bytes.NewBuffer(buf))
+		r.Body = reader
+	} else {
+		s += ", no body"
+	}
+
+	Trace("request %s: %s %s, headers: %s", fmt.Sprintf(format, args...), r.Method, r.URL, s)
+}
+
+// Response logs essential information about an HTTP response
+func Response(resp *http.Response, format string, args ...any) {
+	headers := make([]string, 0)
+	for k, v := range resp.Header {
+		s := fmt.Sprintf("%s: %s", k, strings.Join(v, ", "))
+		headers = append(headers, s)
+	}
+	s := strings.Join(headers, " | ")
+
+	if resp.Body != nil {
+		buf, err := ioutil.ReadAll(resp.Body)
+		defer resp.Body.Close()
+		if err != nil {
+			s += ", error reading body"
+		} else if len(buf) > 0 {
+			s += fmt.Sprintf(", body:%s", strings.TrimSpace(string(buf)))
+		} else {
+			s += ", no body"
+		}
+		reader := ioutil.NopCloser(bytes.NewBuffer(buf))
+		resp.Body = reader
+	} else {
+		s += ", no body"
+	}
+
+	Trace("response %s, status: %d, headers: %s", fmt.Sprintf(format, args...), resp.StatusCode, s)
 }
 
 // Increment increases a count, thread-safe

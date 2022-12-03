@@ -21,6 +21,8 @@ type userConfig struct {
 	Type        string `json:"type,omitempty"`
 	DisplayName string `json:"displayName"`
 	SourceURL   string `json:"outboxSource"`
+	PubKeyFile  string `json:"pubKey,omitempty"`
+	PrivKeyFile string `json:"privKey,omitempty"`
 }
 
 type Config struct {

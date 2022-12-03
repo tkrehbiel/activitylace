@@ -3,12 +3,15 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/go-fed/httpsig"
 	"github.com/google/uuid"
 	"github.com/tkrehbiel/activitylace/server/activity"
 	"github.com/tkrehbiel/activitylace/server/storage"
@@ -20,6 +23,8 @@ type ActivityInbox struct {
 	ownerID   string // id of the owner of the inbox
 	followers storage.Followers
 	pipeline  *OutputPipeline
+	privKey   crypto.PrivateKey
+	pubKeyID  string
 }
 
 // GetHTTP handles GET requests to the inbox, which we don't do
@@ -49,7 +54,6 @@ func (ai *ActivityInbox) PostHTTP(w http.ResponseWriter, r *http.Request) {
 		panic("ActivityInbox pipeline missing")
 	}
 
-	telemetry.Request(r, "ActivityInbox.ServeHTTP %s", ai.id)
 	telemetry.Increment("post_requests", 1)
 
 	jsonBytes, err := io.ReadAll(io.LimitReader(r.Body, 4000))
@@ -160,6 +164,7 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 	// We have to do that outside this function or else race conditions.
 	telemetry.Trace("queuing an accept response")
 	ai.pipeline.Queue(&FollowResponse{
+		inbox:        ai,
 		followers:    ai.followers,
 		follow:       follow,
 		followID:     act.ID,
@@ -173,6 +178,7 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 }
 
 type FollowResponse struct {
+	inbox        *ActivityInbox
 	followers    storage.Followers
 	follow       storage.Follow
 	followID     string
@@ -226,6 +232,10 @@ func (f *FollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error
 	r, err := pipeline.ActivityPostRequest(remote.Inbox, &acceptObject)
 	if err != nil {
 		return nil, fmt.Errorf("creating accept request: %w", err)
+	}
+
+	if f.inbox.privKey != nil {
+		sign(f.inbox.privKey, f.inbox.pubKeyID, r)
 	}
 
 	return r, nil
@@ -289,6 +299,7 @@ func (ai *ActivityInbox) Unfollow(w http.ResponseWriter, undo activity.Activity,
 	// We have to do that outside this function or else race conditions.
 	telemetry.Trace("queuing an accept response")
 	ai.pipeline.Queue(&UnfollowResponse{
+		inbox:        ai,
 		undoID:       undo.ID,
 		remoteID:     actorID,
 		localID:      ai.ownerID,
@@ -300,6 +311,7 @@ func (ai *ActivityInbox) Unfollow(w http.ResponseWriter, undo activity.Activity,
 }
 
 type UnfollowResponse struct {
+	inbox        *ActivityInbox
 	undoID       string
 	localID      string
 	remoteID     string
@@ -364,6 +376,10 @@ func (f *UnfollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, err
 		return nil, fmt.Errorf("creating accept request: %w", err)
 	}
 
+	if f.inbox.privKey != nil {
+		sign(f.inbox.privKey, f.inbox.pubKeyID, r)
+	}
+
 	return r, nil
 }
 
@@ -414,4 +430,22 @@ func jsonBytes(v any) []byte {
 
 func jsonReader(v any) io.Reader {
 	return bytes.NewBuffer(jsonBytes(v))
+}
+
+func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error {
+	prefs := []httpsig.Algorithm{httpsig.RSA_SHA512, httpsig.RSA_SHA256}
+	digestAlgorithm := httpsig.DigestSha256
+	// The "Date" and "Digest" headers must already be set on r, as well as r.URL.
+	headersToSign := []string{httpsig.RequestTarget, "date", "host"}
+	signer, _, err := httpsig.NewSigner(prefs, digestAlgorithm, headersToSign, httpsig.Signature, int64(time.Hour))
+	if err != nil {
+		return err
+	}
+	// To sign the digest, we need to give the signer a copy of the body...
+	// ...but it is optional, no digest will be signed if given "nil"
+	body, _ := io.ReadAll(r.Body)
+	defer r.Body.Close()
+	r.Body = io.NopCloser(bytes.NewBuffer(body)) // replace body since we read it
+	// If r were a http.ResponseWriter, call SignResponse instead.
+	return signer.SignRequest(privateKey, pubKeyId, r, body)
 }

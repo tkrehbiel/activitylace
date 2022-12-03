@@ -1,14 +1,15 @@
 package server
 
 import (
-	"bytes"
 	"context"
+	"crypto"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -27,11 +28,13 @@ type ActivityService struct {
 }
 
 type ActivityUser struct {
-	name   string
-	meta   page.UserMetaData
-	store  storage.Database
-	outbox ActivityOutbox
-	inbox  ActivityInbox
+	name     string
+	meta     page.UserMetaData
+	store    storage.Database
+	outbox   ActivityOutbox
+	inbox    ActivityInbox
+	privKey  crypto.PrivateKey
+	pubKeyID string
 }
 
 func (s *ActivityService) addHandlers() {
@@ -60,7 +63,7 @@ func (s *ActivityService) addHandlers() {
 		s.addPageHandler(page.NewStaticPage(pg), user.meta)
 
 		outpath := fmt.Sprintf("/%s/%s/outbox", page.SubPath, user.name)
-		route := s.router.HandleFunc(outpath, user.outbox.ServeHTTP).Methods("GET") // TODO: filter by Accept
+		route := s.router.HandleFunc(outpath, RequestLogger{Handler: user.outbox.ServeHTTP}.ServeHTTP).Methods("GET") // TODO: filter by Accept
 		if !s.Config.Server.AcceptAll {
 			route.HeadersRegexp("Accept", "application/.*json")
 		}
@@ -82,7 +85,7 @@ func (s *ActivityService) addHandlers() {
 
 func (s *ActivityService) addPageHandler(pg page.StaticPageHandler, meta any) {
 	pg.Init(meta)
-	router := s.router.HandleFunc(pg.Path(), pg.ServeHTTP).Methods("GET")
+	router := s.router.HandleFunc(pg.Path(), RequestLogger{Handler: pg.ServeHTTP}.ServeHTTP).Methods("GET")
 	if !s.Config.Server.AcceptAll && pg.Accept() != "" && pg.Accept() != "*/*" {
 		router.Headers("Accept", pg.Accept())
 	}
@@ -128,6 +131,8 @@ func NewService(cfg Config) ActivityService {
 		return svc
 	}
 
+	svc.Pipeline.host = u.Host
+
 	// metadata available to page templates
 	svc.meta = page.MetaData{
 		URL:      cfg.URL,
@@ -136,19 +141,51 @@ func NewService(cfg Config) ActivityService {
 
 	// configure inboxes and outboxes
 	for _, usercfg := range cfg.Users {
-		dbName := fmt.Sprintf("user_%s.db", usercfg.Name)
-		store := storage.NewDatabase(dbName)
-
 		serverUser := ActivityUser{
-			name:  usercfg.Name,
-			meta:  svc.meta.NewUserMetaData(usercfg.Name),
-			store: store,
+			name: usercfg.Name,
+			meta: svc.meta.NewUserMetaData(usercfg.Name),
 		}
 
-		serverUser.meta.UserDisplayName = usercfg.DisplayName
-		serverUser.meta.UserType = "Person"
+		umeta := &serverUser.meta
+
+		if usercfg.PrivKeyFile != "" {
+			der, err := os.ReadFile(usercfg.PrivKeyFile)
+			if err != nil {
+				telemetry.Error(err, "reading private key file [%s]", usercfg.PrivKeyFile)
+				continue
+			}
+
+			p, _ := pem.Decode(der)
+			if p == nil {
+				telemetry.Error(nil, "decoding private key pem [%s]", usercfg.PrivKeyFile)
+				continue
+			}
+
+			key, err := x509.ParsePKCS1PrivateKey(p.Bytes)
+			if err != nil {
+				telemetry.Error(err, "parsing private key file [%s]", usercfg.PrivKeyFile)
+				continue
+			}
+			serverUser.privKey = key
+		}
+
+		if usercfg.PubKeyFile != "" {
+			b, err := os.ReadFile(usercfg.PubKeyFile)
+			if err != nil {
+				telemetry.Error(err, "reading public key file [%s]", usercfg.PubKeyFile)
+				continue
+			}
+			umeta.UserPublicKey = string(b)
+		}
+
+		dbName := fmt.Sprintf("user_%s.db", usercfg.Name)
+		store := storage.NewDatabase(dbName)
+		serverUser.store = store
+
+		umeta.UserDisplayName = usercfg.DisplayName
+		umeta.UserType = "Person"
 		if usercfg.Type != "" {
-			serverUser.meta.UserType = usercfg.Type
+			umeta.UserType = usercfg.Type
 		}
 
 		serverUser.outbox = ActivityOutbox{
@@ -163,6 +200,8 @@ func NewService(cfg Config) ActivityService {
 			ownerID:   serverUser.meta.UserID,
 			followers: store.(storage.Followers),
 			pipeline:  svc.Pipeline,
+			privKey:   serverUser.privKey,
+			pubKeyID:  umeta.UserPublicKeyID,
 		}
 
 		if err := serverUser.store.Open(); err != nil {
@@ -190,24 +229,7 @@ type RequestLogger struct {
 }
 
 func (rl RequestLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	headers := make([]string, 0)
-	for k, v := range r.Header {
-		s := fmt.Sprintf("%s: %s", k, strings.Join(v, ", "))
-		headers = append(headers, s)
-	}
-	telemetry.Trace(strings.Join(headers, " | "))
-
-	buf, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		telemetry.Error(err, "error reading body")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if len(buf) > 0 {
-		telemetry.Trace(string(buf))
-	}
-	reader := ioutil.NopCloser(bytes.NewBuffer(buf))
-	r.Body = reader
+	telemetry.Request(r, "incoming")
 	rl.Handler(w, r)
 }
 

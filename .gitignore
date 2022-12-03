@@ -3,3 +3,4 @@ abandoned/
 samples/
 config.json
 *.db
+*.pem

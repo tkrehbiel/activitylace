@@ -18,6 +18,11 @@ var ActorEndpoint = StaticPage{
 	"name": "{{ .UserDisplayName }}",
 	"preferredUsername": "{{ .UserName }}",
 	"manuallyApprovesFollowers": true,
+    "publicKey": {
+        "id": "{{ .UserPublicKeyID }}",
+        "owner": "{{ .UserID }}",
+        "publicKeyPem": {{ printf "%q" .UserPublicKey }}
+    },
 	"summary": "{{ .UserSummary }}"
 	{{- if .AvatarURL -}},
 	"icon": {
