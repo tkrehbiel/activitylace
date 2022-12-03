@@ -238,7 +238,7 @@ func (f *FollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error
 		},
 	}
 
-	r, err := pipeline.ActivityPostRequest(remote.Inbox, &acceptObject)
+	r, err := pipeline.ActivityRequest(http.MethodPost, remote.Inbox, &acceptObject)
 	if err != nil {
 		return nil, fmt.Errorf("creating accept request: %w", err)
 	}
@@ -382,7 +382,7 @@ func (f *UnfollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, err
 		},
 	}
 
-	r, err := pipeline.ActivityPostRequest(remote.Inbox, &acceptObject)
+	r, err := pipeline.ActivityRequest(http.MethodPost, remote.Inbox, &acceptObject)
 	if err != nil {
 		return nil, fmt.Errorf("creating accept request: %w", err)
 	}
