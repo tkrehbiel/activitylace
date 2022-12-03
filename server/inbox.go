@@ -475,10 +475,10 @@ func verify(cert publicKeyLoader, r *http.Request) error {
 }
 
 type publicKeyLoader interface {
-	GetActorPublicKey(id string) *x509.Certificate
+	GetActorPublicKey(id string) crypto.PublicKey
 }
 
-func (ai *ActivityInbox) GetActorPublicKey(id string) *x509.Certificate {
+func (ai *ActivityInbox) GetActorPublicKey(id string) crypto.PublicKey {
 	url, err := url.Parse(id)
 	if err != nil {
 		telemetry.Error(err, "parsing public key ID [%s]", id)
@@ -515,10 +515,10 @@ func (ai *ActivityInbox) GetActorPublicKey(id string) *x509.Certificate {
 		telemetry.Error(nil, "can't decode pem [%s]", pubKeyPem)
 		return nil
 	}
-	cert, err := x509.ParseCertificate(der.Bytes)
+	pubKey, err := x509.ParsePKIXPublicKey(der.Bytes)
 	if err != nil {
 		telemetry.Error(err, "parsing public key [%s]", pubKeyPem)
 		return nil
 	}
-	return cert
+	return pubKey
 }
