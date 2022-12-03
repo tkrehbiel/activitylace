@@ -94,6 +94,8 @@ func (s *OutputPipeline) ActivityPostRequest(url string, v any) (*http.Request, 
 // LookupActor finds the remote endpoint for the actor ID, which is assumed to be a URL
 // Blocks until we get a response or the context is cancelled or times out
 func (s *OutputPipeline) LookupActor(ctx context.Context, id string) (*activity.Actor, error) {
+	telemetry.Trace("Looking up actor %s", id)
+
 	var actor activity.Actor
 	r, err := http.NewRequest(http.MethodGet, id, nil)
 	if err != nil {
@@ -113,6 +115,7 @@ func (s *OutputPipeline) LookupActor(ctx context.Context, id string) (*activity.
 			response <- fmt.Errorf("reading response bytes: %w", err)
 			return
 		}
+		telemetry.Trace("got response from actor %s", string(jsonBytes))
 		if err := json.Unmarshal(jsonBytes, &actor); err != nil {
 			response <- fmt.Errorf("unmarshaling json [%s]: %w", string(jsonBytes), err)
 			return

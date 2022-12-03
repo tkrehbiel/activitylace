@@ -167,6 +167,8 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 		return
 	}
 
+	telemetry.Trace("sending accept request")
+
 	// ActivityPub requires us to send an Accept response to the followee's inbox
 	// https://www.w3.org/TR/activitypub/#follow-activity-inbox
 	message += " - sending Accept"
@@ -193,6 +195,7 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 	// Finally, send the Accept request back to the sender
 	telemetry.Increment("accept_requests", 1)
 	ai.pipeline.SendAndWait(r, func(resp *http.Response) {
+		telemetry.Trace("received response from accept %d", resp.StatusCode)
 		if resp.StatusCode == http.StatusOK {
 			message += " - accepted"
 			telemetry.Increment("accept_responses", 1)
