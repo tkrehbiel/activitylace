@@ -34,3 +34,9 @@ Resolution: This was caused by [misspelling (actually mis-casing) `preferredUser
 Pleroma successfully sends a Follow activity to the inbox, but it doesn't list the remote account among its followers. Responding to the Follow activity with a 200 OK is apparently not enough.
 
 Resolution: _Apparently_ you have to send an Accept activity back to the source before the Follow action is complete. I discovered this by searching the source code of an ActivityPub PHP WordPress plugin. I finally found this buried in the spec [here](https://www.w3.org/TR/activitypub/#accept-activity-inbox). Soapbox: ActivityPub is poorly documented for a W3C standard.
+
+## Race Condition sending Accept back after a Follow request
+
+Server kept hanging when trying to send an Accept back to the origin after receiving a Follow request.
+
+Resolution: Oh! I'm dumb. I think this is because I was sending out a new web request (and trying to wait for it to return) in the middle of handling the follow request. So I need to queue the Accept to run elsewhere. Duh.

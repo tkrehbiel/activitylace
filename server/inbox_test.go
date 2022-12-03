@@ -141,6 +141,8 @@ func TestInbox_Follow(t *testing.T) {
 		break
 	}
 
+	pipeline.Flush() // wait for queued requests to finish
+
 	database.AssertExpectations(t)
 }
 
@@ -219,6 +221,8 @@ func TestInbox_UnFollow(t *testing.T) {
 	case <-done:
 		break
 	}
+
+	pipeline.Flush() // wait for queued requests to finish
 
 	database.AssertExpectations(t)
 }

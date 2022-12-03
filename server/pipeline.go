@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/tkrehbiel/activitylace/server/activity"
@@ -17,25 +18,30 @@ import (
 // The idea is to be able to queue up a large number of requests to send staggered over time, rather than all at once.
 // (The rate limiting is not yet implemented.)
 type OutputPipeline struct {
-	client   http.Client
-	pipeline chan AsyncRequest
-	stop     chan bool
+	client    http.Client
+	pipeline  chan QueueHandler
+	waitGroup sync.WaitGroup
 }
 
-// AsyncRequest is an asynchronous request and a handler for the response
-type AsyncRequest struct {
-	Request *http.Request
-	Handler func(resp *http.Response)
+type QueueHandler interface {
+	Prepare(*OutputPipeline) (*http.Request, error)
+	Receive(resp *http.Response)
 }
 
-func (p *OutputPipeline) Send(r *http.Request, accept func(resp *http.Response)) {
+func (p *OutputPipeline) Queue(handler QueueHandler) {
 	if p == nil {
 		panic("no pipeline")
 	}
 	if p.pipeline == nil {
 		panic("no pipeline channel")
 	}
-	p.pipeline <- AsyncRequest{Request: r, Handler: accept}
+	p.waitGroup.Add(1)
+	p.pipeline <- handler
+}
+
+// Flush blocks until the pipeline is empty
+func (p *OutputPipeline) Flush() {
+	p.waitGroup.Wait()
 }
 
 func (p *OutputPipeline) SendAndWait(r *http.Request, accept func(resp *http.Response)) {
@@ -54,17 +60,25 @@ func (p *OutputPipeline) Run(ctx context.Context) error {
 	// 	return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	case msg := <-p.pipeline:
-		resp, err := p.client.Do(msg.Request)
-		if err == nil && msg.Handler != nil {
-			msg.Handler(resp)
+	case handler := <-p.pipeline:
+		r, err := handler.Prepare(p)
+		if err != nil {
+			telemetry.Error(err, "pipeline queue, getting request")
+		} else {
+			resp, err := p.client.Do(r)
+			if err != nil {
+				telemetry.Error(err, "pipeline queue, getting response")
+			} else {
+				handler.Receive(resp)
+			}
+			p.waitGroup.Done()
 		}
 	}
 	return nil
 }
 
 func (p *OutputPipeline) Stop() {
-	//p.stop <- true
+	p.Flush()
 }
 
 func NewPipeline() *OutputPipeline {
@@ -72,8 +86,7 @@ func NewPipeline() *OutputPipeline {
 		client: http.Client{
 			Timeout: time.Second * 5,
 		},
-		pipeline: make(chan AsyncRequest),
-		stop:     make(chan bool),
+		pipeline: make(chan QueueHandler),
 	}
 }
 

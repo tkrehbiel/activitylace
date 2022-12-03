@@ -155,67 +155,77 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 		telemetry.Error(err, "database error")
 	}
 
-	// At this point we can indicate a successful status OK
-	w.WriteHeader(http.StatusOK)
-
-	// Now for the arduous process of sending an Accept back to the sender.
-	// We don't save the follower in our list until a successful Accept has been sent.
-
-	// Lookup the follower's inbox
-	followingActor, err := ai.pipeline.LookupActor(context.Background(), actorID)
-	if err != nil {
-		// Can't lookup the actor who's following, stop
-		// TODO: should remove the pending follower?
-		message += fmt.Sprintf(" - can't lookup follower: %s", err)
-		w.WriteHeader(http.StatusServiceUnavailable)
-		return
-	}
-
-	telemetry.Trace("sending accept request")
-
-	// ActivityPub requires us to send an Accept response to the followee's inbox
-	// https://www.w3.org/TR/activitypub/#follow-activity-inbox
-	message += " - sending Accept"
-	acceptObject := activity.Activity{
-		Context: activity.Context,
-		Type:    activity.AcceptType,
-		Actor:   ai.ownerID,
-		Object: activity.Activity{
-			// Return the information that was sent to us
-			Type:   activity.FollowType,
-			ID:     act.ID,
-			Actor:  actorID,
-			Object: objectID,
-		},
-	}
-
-	r, err := ai.pipeline.ActivityPostRequest(followingActor.Inbox, &acceptObject)
-	if err != nil {
-		message += " - can't send"
-		telemetry.Error(err, "creating Accept request")
-		return
-	}
-
-	// Finally, send the Accept request back to the sender
-	telemetry.Increment("accept_requests", 1)
-	ai.pipeline.SendAndWait(r, func(resp *http.Response) {
-		telemetry.Trace("received response from accept %d", resp.StatusCode)
-		if resp.StatusCode == http.StatusOK {
-			message += " - accepted"
-			telemetry.Increment("accept_responses", 1)
-			// mark transaction was completed successfully
-			follow.RequestStatus = "accepted"
-			if err := ai.followers.SaveFollow(follow); err != nil {
-				// Bad time for a database error. This will leave the follow request
-				// marked as "pending" in our local database, but the remote server
-				// will believe the transaction was successful and they are following.
-				message += " - database write error"
-				telemetry.Error(err, "database error")
-			}
-		}
+	// Queue an Accept response.
+	// We have to do that outside this function or else race conditions.
+	telemetry.Trace("queuing an accept response")
+	ai.pipeline.Queue(&FollowResponse{
+		followers:    ai.followers,
+		follow:       follow,
+		followID:     act.ID,
+		remoteID:     actorID,
+		localID:      ai.ownerID,
+		responseType: activity.AcceptType,
 	})
 
 	message += " - success"
+	w.WriteHeader(http.StatusOK)
+}
+
+type FollowResponse struct {
+	followers    storage.Followers
+	follow       storage.Follow
+	followID     string
+	localID      string
+	remoteID     string
+	responseType string
+}
+
+func (f *FollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error) {
+	// Lookup the follower's inbox
+	telemetry.Increment("actor_fetches", 1)
+	remote, err := pipeline.LookupActor(context.Background(), f.remoteID)
+	if err != nil {
+		return nil, fmt.Errorf("looking up remote actor: %w", err)
+	}
+
+	// ActivityPub requires us to send an Accept response to the followee's inbox
+	// https://www.w3.org/TR/activitypub/#follow-activity-inbox
+	telemetry.Trace("sending accept request")
+
+	acceptObject := activity.Activity{
+		Context: activity.Context,
+		Type:    f.responseType,
+		Actor:   f.localID,
+		Object: activity.Activity{
+			// Return the information that was sent to us
+			Type:   activity.FollowType,
+			ID:     f.followID,
+			Actor:  f.remoteID,
+			Object: f.localID,
+		},
+	}
+
+	r, err := pipeline.ActivityPostRequest(remote.Inbox, &acceptObject)
+	if err != nil {
+		return nil, fmt.Errorf("creating accept request: %w", err)
+	}
+
+	return r, nil
+}
+
+func (f *FollowResponse) Receive(resp *http.Response) {
+	telemetry.Trace("received response from accept %d", resp.StatusCode)
+	if resp.StatusCode == http.StatusOK {
+		telemetry.Increment("accept_responses", 1)
+		// mark transaction was completed successfully
+		f.follow.RequestStatus = "accepted"
+		if err := f.followers.SaveFollow(f.follow); err != nil {
+			// Bad time for a database error. This will leave the follow request
+			// marked as "pending" in our local database, but the remote server
+			// will believe the transaction was successful and they are following.
+			telemetry.Error(err, "database error")
+		}
+	}
 }
 
 func (ai *ActivityInbox) Unfollow(w http.ResponseWriter, undo activity.Activity, follow activity.Activity) {
@@ -257,23 +267,39 @@ func (ai *ActivityInbox) Unfollow(w http.ResponseWriter, undo activity.Activity,
 		return
 	}
 
+	// Queue an Accept response.
+	// We have to do that outside this function or else race conditions.
+	telemetry.Trace("queuing an accept response")
+	ai.pipeline.Queue(&UnfollowResponse{
+		undoID:       undo.ID,
+		remoteID:     actorID,
+		localID:      ai.ownerID,
+		responseType: activity.AcceptType,
+	})
+
+	message += " - success"
 	w.WriteHeader(http.StatusOK)
+}
 
-	// Now for the arduous process of sending an Accept back to the sender.
-	// We don't save the follower in our list until a successful Accept has been sent.
+type UnfollowResponse struct {
+	undoID       string
+	localID      string
+	remoteID     string
+	responseType string
+}
 
+func (f *UnfollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error) {
 	// Lookup the follower's inbox
-	followingActor, err := ai.pipeline.LookupActor(context.Background(), actorID)
+	telemetry.Increment("actor_fetches", 1)
+	remote, err := pipeline.LookupActor(context.Background(), f.remoteID)
 	if err != nil {
-		// Can't lookup the actor who's following, stop
-		message += fmt.Sprintf(" - can't lookup follower: %s", err)
-		w.WriteHeader(http.StatusServiceUnavailable)
-		return
+		return nil, fmt.Errorf("looking up remote actor: %w", err)
 	}
 
 	// ActivityPub requires us to send an Accept response to the followee's inbox
 	// https://www.w3.org/TR/activitypub/#follow-activity-inbox
-	message += " - sending Accept"
+	telemetry.Trace("sending accept request")
+
 	type undoFollow struct {
 		Type   string            `json:"type"`
 		ID     string            `json:"id"`
@@ -288,35 +314,35 @@ func (ai *ActivityInbox) Unfollow(w http.ResponseWriter, undo activity.Activity,
 	}{
 		Context: activity.Context,
 		Type:    activity.AcceptType,
-		Actor:   ai.ownerID,
+		Actor:   f.localID,
 		Object: undoFollow{
 			// Recreate the basics of the information that was sent to us.
 			Type:  activity.UndoType,
-			ID:    undo.ID,
-			Actor: ai.ownerID,
+			ID:    f.undoID,
+			Actor: f.localID,
 			Object: activity.Activity{
+				// Doesn't try to send the Follow ID back, why bother?
 				Type:   activity.FollowType,
-				Actor:  actorID,
-				Object: ai.ownerID,
+				Actor:  f.remoteID,
+				Object: f.localID,
 			},
 		},
 	}
 
-	r, err := ai.pipeline.ActivityPostRequest(followingActor.Inbox, &acceptObject)
+	r, err := pipeline.ActivityPostRequest(remote.Inbox, &acceptObject)
 	if err != nil {
-		message += " - can't send"
-		telemetry.Error(err, "creating Accept request")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		return
+		return nil, fmt.Errorf("creating accept request: %w", err)
 	}
 
-	// Finally, send the Accept request back to the sender.
-	// In this case we don't care to wait for a response.
-	// TODO: Send() doesn't work the way I want it to.
-	telemetry.Increment("accept_requests", 1)
-	ai.pipeline.SendAndWait(r, nil)
+	return r, nil
+}
 
-	message += " - success"
+func (f *UnfollowResponse) Receive(resp *http.Response) {
+	telemetry.Trace("received response from accept %d", resp.StatusCode)
+	if resp.StatusCode == http.StatusOK {
+		// Nothing really to do
+		telemetry.Increment("accept_responses", 1)
+	}
 }
 
 func parseID(v interface{}) (val string) {
