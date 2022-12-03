@@ -466,6 +466,9 @@ func verify(cert publicKeyLoader, r *http.Request) error {
 	}
 	pubKeyId := verifier.KeyId()
 	pubKey := cert.GetActorPublicKey(pubKeyId)
+	if pubKey == nil {
+		return fmt.Errorf("no public key to verify request signature")
+	}
 	algo := httpsig.RSA_SHA256
 	// The verifier will verify the Digest in addition to the HTTP signature
 	return verifier.Verify(pubKey, algo)
@@ -496,6 +499,10 @@ func (ai *ActivityInbox) GetActorPublicKey(id string) *x509.Certificate {
 	decoder := json.NewDecoder(resp.Body)
 	if err := decoder.Decode(&actor); err != nil {
 		telemetry.Error(err, "decoding json body")
+		return nil
+	}
+	if actor.ID != url.String() {
+		telemetry.Error(err, "remote actor ID [%s] doesn't match [%s]", actor.ID, url.String())
 		return nil
 	}
 	if actor.PublicKey.ID != id {
