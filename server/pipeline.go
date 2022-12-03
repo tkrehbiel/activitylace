@@ -24,6 +24,7 @@ type OutputPipeline struct {
 }
 
 type QueueHandler interface {
+	fmt.Stringer
 	Prepare(*OutputPipeline) (*http.Request, error)
 	Receive(resp *http.Response)
 }
@@ -64,7 +65,7 @@ func (p *OutputPipeline) Run(ctx context.Context) error {
 			telemetry.Log("pipeline cancelled: %s", ctx.Err())
 			return ctx.Err()
 		case handler := <-p.pipeline:
-			telemetry.Trace("pipeline queue, message received")
+			telemetry.Trace("pipeline queue, message received [%s]", handler.String())
 			r, err := handler.Prepare(p)
 			if err != nil {
 				telemetry.Error(err, "pipeline queue, getting request")
@@ -111,7 +112,7 @@ func (s *OutputPipeline) ActivityPostRequest(url string, v any) (*http.Request, 
 // LookupActor finds the remote endpoint for the actor ID, which is assumed to be a URL
 // Blocks until we get a response or the context is cancelled or times out
 func (s *OutputPipeline) LookupActor(ctx context.Context, id string) (*activity.Actor, error) {
-	telemetry.Trace("Looking up actor %s", id)
+	telemetry.Trace("looking up actor %s", id)
 
 	var actor activity.Actor
 	r, err := http.NewRequest(http.MethodGet, id, nil)
@@ -134,7 +135,6 @@ func (s *OutputPipeline) LookupActor(ctx context.Context, id string) (*activity.
 			respErr = fmt.Errorf("reading response bytes: %w", err)
 			return
 		}
-		telemetry.Trace("got response from actor %s", string(jsonBytes))
 		respErr = json.Unmarshal(jsonBytes, &actor)
 	})
 

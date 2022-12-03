@@ -180,6 +180,10 @@ type FollowResponse struct {
 	responseType string
 }
 
+func (f *FollowResponse) String() string {
+	return fmt.Sprintf("Follow %s to %s", f.responseType, f.remoteID)
+}
+
 func (f *FollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error) {
 	// Lookup the follower's inbox
 	telemetry.Increment("actor_fetches", 1)
@@ -286,6 +290,10 @@ type UnfollowResponse struct {
 	localID      string
 	remoteID     string
 	responseType string
+}
+
+func (f *UnfollowResponse) String() string {
+	return fmt.Sprintf("Unfollow %s to %s", f.responseType, f.remoteID)
 }
 
 func (f *UnfollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error) {
