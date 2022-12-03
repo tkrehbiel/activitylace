@@ -105,24 +105,26 @@ func (s *OutputPipeline) LookupActor(ctx context.Context, id string) (*activity.
 	// TODO: make this more asynchronous, and (optionally?) cache the results locally
 	// TODO: retry periodically
 
-	done := make(chan error)
+	response := make(chan error)
 	s.Send(r, func(resp *http.Response) {
 		// On getting a response...
 		jsonBytes, err := io.ReadAll(io.LimitReader(resp.Body, 4000))
 		if err != nil {
-			done <- fmt.Errorf("reading response bytes: %w", err)
+			response <- fmt.Errorf("reading response bytes: %w", err)
+			return
 		}
 		if err := json.Unmarshal(jsonBytes, &actor); err != nil {
-			done <- fmt.Errorf("unmarshaling json [%s]: %w", string(jsonBytes), err)
+			response <- fmt.Errorf("unmarshaling json [%s]: %w", string(jsonBytes), err)
+			return
 		}
-		done <- nil // just says we're done without error
+		response <- nil // just says we're done without error
 	})
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, time.Second*10) // TODO: configurable time
 	defer cancel()
 
 	select {
-	case respErr := <-done:
+	case respErr := <-response:
 		if respErr != nil {
 			telemetry.Error(err, "looking up user ID [%s]", id)
 			return nil, respErr

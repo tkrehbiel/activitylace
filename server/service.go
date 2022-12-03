@@ -60,11 +60,21 @@ func (s *ActivityService) addHandlers() {
 		s.addPageHandler(page.NewStaticPage(pg), user.meta)
 
 		outpath := fmt.Sprintf("/%s/%s/outbox", page.SubPath, user.name)
-		s.router.HandleFunc(outpath, user.outbox.ServeHTTP).Methods("GET") // TODO: filter by Accept
+		route := s.router.HandleFunc(outpath, user.outbox.ServeHTTP).Methods("GET") // TODO: filter by Accept
+		if !s.Config.Server.AcceptAll {
+			route.HeadersRegexp("Accept", "application/.*json")
+		}
 
 		inpath := fmt.Sprintf("/%s/%s/inbox", page.SubPath, user.name)
-		s.router.HandleFunc(inpath, RequestLogger{Handler: user.inbox.GetHTTP}.ServeHTTP).Methods("GET")   // TODO: filter by Accept
-		s.router.HandleFunc(inpath, RequestLogger{Handler: user.inbox.PostHTTP}.ServeHTTP).Methods("POST") // TODO: filter by Accept
+		route = s.router.HandleFunc(inpath, RequestLogger{Handler: user.inbox.GetHTTP}.ServeHTTP).Methods("GET") // TODO: filter by Accept
+		if !s.Config.Server.AcceptAll {
+			route.HeadersRegexp("Accept", "application/.*json")
+		}
+		route = s.router.HandleFunc(inpath, RequestLogger{Handler: user.inbox.PostHTTP}.ServeHTTP).Methods("POST")
+		if !s.Config.Server.AcceptAll {
+			route.HeadersRegexp("Accept", "application/.*json")
+		}
+
 	}
 
 	// TODO: robots.txt
