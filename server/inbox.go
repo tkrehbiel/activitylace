@@ -433,7 +433,7 @@ func jsonReader(v any) io.Reader {
 }
 
 func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error {
-	prefs := []httpsig.Algorithm{httpsig.RSA_SHA512, httpsig.RSA_SHA256}
+	prefs := []httpsig.Algorithm{httpsig.RSA_SHA256}
 	digestAlgorithm := httpsig.DigestSha256
 	// The "Date" and "Digest" headers must already be set on r, as well as r.URL.
 	headersToSign := []string{httpsig.RequestTarget, "date", "host"}
