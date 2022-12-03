@@ -1,6 +1,7 @@
 {
  "@context": "https://www.w3.org/ns/activitystreams",
  "type": "Follow",
+ "id": "123",
  "actor": "http://localhost/user/fred",
  "object": "http://localhost:8080/activity/news"
 }

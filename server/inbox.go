@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/tkrehbiel/activitylace/server/activity"
 	"github.com/tkrehbiel/activitylace/server/storage"
 	"github.com/tkrehbiel/activitylace/server/telemetry"
@@ -196,9 +197,20 @@ func (f *FollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error
 	// https://www.w3.org/TR/activitypub/#follow-activity-inbox
 	telemetry.Trace("sending accept request")
 
-	acceptObject := activity.Activity{
+	acceptID := uuid.NewString()
+
+	acceptObject := struct {
+		Context string            `json:"@context"`
+		Type    string            `json:"type"`
+		ID      string            `json:"id"`
+		Actor   string            `json:"actor"`
+		Object  activity.Activity `json:"object"`
+		To      []string          `json:"to"`
+		CC      []string          `json:"cc"`
+	}{
 		Context: activity.Context,
 		Type:    f.responseType,
+		ID:      acceptID, // Pleroma requires an id
 		Actor:   f.localID,
 		Object: activity.Activity{
 			// Return the information that was sent to us
@@ -306,6 +318,8 @@ func (f *UnfollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, err
 		return nil, fmt.Errorf("looking up remote actor: %w", err)
 	}
 
+	acceptID := uuid.NewString()
+
 	// ActivityPub requires us to send an Accept response to the followee's inbox
 	// https://www.w3.org/TR/activitypub/#follow-activity-inbox
 	telemetry.Trace("sending accept request")
@@ -321,6 +335,7 @@ func (f *UnfollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, err
 	acceptObject := struct {
 		Context string     `json:"@context"`
 		Type    string     `json:"type"`
+		ID      string     `json:"id"` // Pleroma requires an id
 		Actor   string     `json:"actor,omitempty"`
 		Object  undoFollow `json:"object,omitempty"`
 		To      []string   `json:"to"`
@@ -328,6 +343,7 @@ func (f *UnfollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, err
 	}{
 		Context: activity.Context,
 		Type:    activity.AcceptType,
+		ID:      acceptID,
 		Actor:   f.localID,
 		Object: undoFollow{
 			// Recreate the basics of the information that was sent to us.
