@@ -56,28 +56,29 @@ func (p *OutputPipeline) SendAndWait(r *http.Request, accept func(resp *http.Res
 func (p *OutputPipeline) Run(ctx context.Context) error {
 	telemetry.Trace("running output pipeline")
 	// Wait for context end or messages from the pipeline channel
-	select {
-	// case <-p.stop:
-	// 	return nil
-	case <-ctx.Done():
-		telemetry.Log("pipeline cancelled: %s", ctx.Err())
-		return ctx.Err()
-	case handler := <-p.pipeline:
-		telemetry.Trace("pipeline queue, message received")
-		r, err := handler.Prepare(p)
-		if err != nil {
-			telemetry.Error(err, "pipeline queue, getting request")
-		} else {
-			resp, err := p.client.Do(r)
+	for {
+		select {
+		// case <-p.stop:
+		// 	return nil
+		case <-ctx.Done():
+			telemetry.Log("pipeline cancelled: %s", ctx.Err())
+			return ctx.Err()
+		case handler := <-p.pipeline:
+			telemetry.Trace("pipeline queue, message received")
+			r, err := handler.Prepare(p)
 			if err != nil {
-				telemetry.Error(err, "pipeline queue, getting response")
+				telemetry.Error(err, "pipeline queue, getting request")
 			} else {
-				handler.Receive(resp)
+				resp, err := p.client.Do(r)
+				if err != nil {
+					telemetry.Error(err, "pipeline queue, getting response")
+				} else {
+					handler.Receive(resp)
+				}
+				p.waitGroup.Done()
 			}
-			p.waitGroup.Done()
 		}
 	}
-	return nil
 }
 
 func (p *OutputPipeline) Stop() {
