@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -55,6 +57,12 @@ func (ai *ActivityInbox) PostHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	telemetry.Increment("post_requests", 1)
+
+	if err := verify(ai, r); err != nil {
+		telemetry.Error(err, "verifying signature")
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 
 	jsonBytes, err := io.ReadAll(io.LimitReader(r.Body, 4000))
 	if err != nil {
@@ -448,4 +456,47 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 	r.Body = io.NopCloser(bytes.NewBuffer(body)) // replace body since we read it
 	// If r were a http.ResponseWriter, call SignResponse instead.
 	return signer.SignRequest(privateKey, pubKeyId, r, body)
+}
+
+func verify(cert publicKeyLoader, r *http.Request) error {
+	verifier, err := httpsig.NewVerifier(r)
+	if err != nil {
+		return err
+	}
+	pubKeyId := verifier.KeyId()
+	pubKey := cert.GetActorPublicKey(pubKeyId)
+	algo := httpsig.RSA_SHA256
+	// The verifier will verify the Digest in addition to the HTTP signature
+	return verifier.Verify(pubKey, algo)
+}
+
+type publicKeyLoader interface {
+	GetActorPublicKey(id string) *x509.Certificate
+}
+
+func (ai *ActivityInbox) GetActorPublicKey(id string) *x509.Certificate {
+	url, err := url.Parse(id)
+	if err != nil {
+		telemetry.Error(err, "parsing public key ID [%s]", id)
+		return nil
+	}
+	url.Fragment = "" // remove the fragment
+	resp, err := http.Get(url.String())
+	if err != nil {
+		telemetry.Error(err, "fetching remote actor endpoint [%s]", url)
+		return nil
+	}
+	var actor activity.Actor
+	decoder := json.NewDecoder(resp.Body)
+	if err := decoder.Decode(&actor); err != nil {
+		telemetry.Error(err, "decoding json body")
+		return nil
+	}
+	pubKeyPem := actor.PublicKey.Key
+	cert, err := x509.ParseCertificate([]byte(pubKeyPem))
+	if err != nil {
+		telemetry.Error(err, "parsing public key")
+		return nil
+	}
+	return cert
 }
