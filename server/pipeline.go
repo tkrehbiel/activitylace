@@ -100,14 +100,17 @@ func NewPipeline() *OutputPipeline {
 	}
 }
 
-func (s *OutputPipeline) ActivityPostRequest(url string, v any) (*http.Request, error) {
-	body, err := json.Marshal(v)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling json from object: %w", err)
+func (s *OutputPipeline) ActivityRequest(method string, url string, v any) (*http.Request, error) {
+	var reader io.Reader
+	if v != nil {
+		body, err := json.Marshal(v)
+		if err != nil {
+			return nil, fmt.Errorf("marshaling json from object: %w", err)
+		}
+		telemetry.Trace("creating request body %s", string(body))
+		reader = bytes.NewBuffer(body)
 	}
-	telemetry.Trace("creating request body %s", string(body))
-	reader := bytes.NewBuffer(body)
-	r, err := http.NewRequest(http.MethodPost, url, reader)
+	r, err := http.NewRequest(method, url, reader)
 	if err != nil {
 		return nil, fmt.Errorf("creating ActivityPub request: %w", err)
 	}

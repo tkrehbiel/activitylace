@@ -6,6 +6,7 @@ import (
 	"crypto"
 	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
@@ -481,7 +482,12 @@ func (ai *ActivityInbox) GetActorPublicKey(id string) *x509.Certificate {
 		return nil
 	}
 	url.Fragment = "" // remove the fragment
-	resp, err := http.Get(url.String())
+	r, err := ai.pipeline.ActivityRequest("GET", url.String(), nil)
+	if err != nil {
+		telemetry.Error(err, "creating request")
+		return nil
+	}
+	resp, err := ai.pipeline.client.Do(r)
 	if err != nil {
 		telemetry.Error(err, "fetching remote actor endpoint [%s]", url)
 		return nil
@@ -492,8 +498,13 @@ func (ai *ActivityInbox) GetActorPublicKey(id string) *x509.Certificate {
 		telemetry.Error(err, "decoding json body")
 		return nil
 	}
+	if actor.PublicKey.ID != id {
+		telemetry.Error(err, "remote public key ID [%s] doesn't match [%s]", actor.PublicKey.ID, id)
+		return nil
+	}
 	pubKeyPem := actor.PublicKey.Key
-	cert, err := x509.ParseCertificate([]byte(pubKeyPem))
+	der, _ := pem.Decode([]byte(pubKeyPem))
+	cert, err := x509.ParseCertificate(der.Bytes)
 	if err != nil {
 		telemetry.Error(err, "parsing public key")
 		return nil
