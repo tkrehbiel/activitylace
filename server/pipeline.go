@@ -107,33 +107,23 @@ func (s *OutputPipeline) LookupActor(ctx context.Context, id string) (*activity.
 	// TODO: make this more asynchronous, and (optionally?) cache the results locally
 	// TODO: retry periodically
 
-	response := make(chan error)
-	s.Send(r, func(resp *http.Response) {
+	// TODO: My pipeline isn't working with channels, gets caught in race conditions... fix that.
+	// Although for this particular function a synchronous call and response is okay.
+	var respErr error
+	s.SendAndWait(r, func(resp *http.Response) {
 		// On getting a response...
 		jsonBytes, err := io.ReadAll(io.LimitReader(resp.Body, 4000))
 		if err != nil {
-			response <- fmt.Errorf("reading response bytes: %w", err)
+			respErr = fmt.Errorf("reading response bytes: %w", err)
 			return
 		}
 		telemetry.Trace("got response from actor %s", string(jsonBytes))
-		if err := json.Unmarshal(jsonBytes, &actor); err != nil {
-			response <- fmt.Errorf("unmarshaling json [%s]: %w", string(jsonBytes), err)
-			return
-		}
-		response <- nil // just says we're done without error
+		respErr = json.Unmarshal(jsonBytes, &actor)
 	})
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, time.Second*10) // TODO: configurable time
-	defer cancel()
-
-	select {
-	case respErr := <-response:
-		if respErr != nil {
-			telemetry.Error(err, "looking up user ID [%s]", id)
-			return nil, respErr
-		}
-		return &actor, nil
-	case <-timeoutCtx.Done():
-		return nil, ctx.Err()
+	if respErr != nil {
+		telemetry.Error(err, "looking up user ID [%s]", id)
+		return nil, respErr
 	}
+	return &actor, nil
 }

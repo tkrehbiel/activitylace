@@ -101,7 +101,7 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 	// The actor is the id of the person who wants to follow
 	actorID := parseID(act.Actor)
 
-	// The object is the user that is to be followed. It should match the owner of the Inbox.
+	// The object is the user that is to be followed, which should be the owner of the Inbox.
 	objectID := parseID(act.Object)
 
 	var message = fmt.Sprintf("POST follow [%s] by [%s] at inbox [%s]", objectID, actorID, ai.id)
@@ -110,17 +110,21 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 	}()
 
 	if objectID != ai.ownerID {
-		// Trying to follow someone other than the owner of this inbox, not allowed.
+		// Trying to follow someone other than the owner of this inbox, doesn't make sense.
 		// #ActivityPub There is no information about what to do in this situation in the spec.
 		message += " - rejected, wrong inbox"
-		w.WriteHeader(http.StatusNotAcceptable)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	if act.ID == "" {
-		// No Follow ID provided. #ActivityPub does not describe what to do in this situation.
-		// We reject these, because the ID is crucial for the ensuring Accept.
+		// No Follow ID provided. #ActivityPub doesn't specify if this is required,
+		// but we reject these, because the ID is crucial for sending Accept response,
+		// so the remote server knows what we're accepting.
 		act.ID = strings.Join([]string{objectID, actorID}, "-")
+		message += " - rejected, no follow id"
+		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
 
 	existing, err := ai.followers.FindFollow(actorID)
@@ -135,8 +139,8 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 		// #ActivityPub says nothing about what to do in this situation. Just winging it.
 		// TODO: Probably should go ahead and send an Accept anyway, in case the activity didn't finish.
 		message += " - already following"
-		w.WriteHeader(http.StatusOK)
-		return
+		// We don't really need to do anything, but the sender is expecting a response anyway.
+		// Falls through and attempts to send an accept anyway (though it may have already been sent)
 	}
 
 	// Save the new follower. We mark it as "pending" until we successfully
