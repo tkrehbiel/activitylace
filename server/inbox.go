@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"context"
 	"crypto"
 	"crypto/x509"
 	"encoding/json"
@@ -16,18 +15,20 @@ import (
 
 	"github.com/go-fed/httpsig"
 	"github.com/google/uuid"
+	"github.com/karlseguin/ccache/v3"
 	"github.com/tkrehbiel/activitylace/server/activity"
 	"github.com/tkrehbiel/activitylace/server/storage"
 	"github.com/tkrehbiel/activitylace/server/telemetry"
 )
 
 type ActivityInbox struct {
-	id        string
-	ownerID   string // id of the owner of the inbox
-	followers storage.Followers
-	pipeline  *OutputPipeline
-	privKey   crypto.PrivateKey
-	pubKeyID  string
+	id         string
+	ownerID    string // id of the owner of the inbox
+	followers  storage.Followers
+	pipeline   *OutputPipeline
+	privKey    crypto.PrivateKey
+	pubKeyID   string
+	actorCache *ccache.Cache[activity.Actor]
 }
 
 // GetHTTP handles GET requests to the inbox, which we don't do
@@ -203,7 +204,7 @@ func (f *FollowResponse) String() string {
 func (f *FollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error) {
 	// Lookup the follower's inbox
 	telemetry.Increment("actor_fetches", 1)
-	remote, err := pipeline.LookupActor(context.Background(), f.remoteID)
+	remote, err := f.inbox.GetActor(f.remoteID)
 	if err != nil {
 		return nil, fmt.Errorf("looking up remote actor: %w", err)
 	}
@@ -334,7 +335,7 @@ func (f *UnfollowResponse) String() string {
 func (f *UnfollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error) {
 	// Lookup the follower's inbox
 	telemetry.Increment("actor_fetches", 1)
-	remote, err := pipeline.LookupActor(context.Background(), f.remoteID)
+	remote, err := f.inbox.GetActor(f.remoteID)
 	if err != nil {
 		return nil, fmt.Errorf("looking up remote actor: %w", err)
 	}
@@ -443,6 +444,7 @@ func jsonReader(v any) io.Reader {
 	return bytes.NewBuffer(jsonBytes(v))
 }
 
+// sign an http request with a public and private key
 func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error {
 	prefs := []httpsig.Algorithm{httpsig.RSA_SHA256}
 	digestAlgorithm := httpsig.DigestSha256
@@ -459,6 +461,7 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 	return signer.SignRequest(privateKey, pubKeyId, r, body)
 }
 
+// verify a signed http request, returns an err if the validation fails or nil on success
 func verify(cert publicKeyLoader, r *http.Request) error {
 	verifier, err := httpsig.NewVerifier(r)
 	if err != nil {
@@ -478,29 +481,55 @@ type publicKeyLoader interface {
 	GetActorPublicKey(id string) crypto.PublicKey
 }
 
+// LookupActor finds the remote endpoint for the actor ID, which is assumed to be a URL
+// Blocks until we get a response or the context is cancelled or times out
+func (ai *ActivityInbox) GetActor(id string) (*activity.Actor, error) {
+	item := ai.actorCache.Get(id)
+	if item != nil && !item.Expired() {
+		telemetry.Trace("found actor %s in cache", id)
+		cached := item.Value()
+		return &cached, nil
+	}
+
+	// TODO: maybe support webfingering an acct:x@y resource too
+	// TODO: make this more asynchronous, and (optionally?) cache the results locally
+	// TODO: retry periodically?
+
+	r, err := ai.pipeline.ActivityRequest("GET", id, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := ai.pipeline.client.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	var actor activity.Actor
+	decoder := json.NewDecoder(resp.Body)
+	if err := decoder.Decode(&actor); err != nil {
+		telemetry.Error(err, "decoding json body")
+		return nil, err
+	}
+
+	ai.actorCache.Set(id, actor, 10*time.Minute)
+
+	return &actor, nil
+}
+
 func (ai *ActivityInbox) GetActorPublicKey(id string) crypto.PublicKey {
+	// TODO: Cache this result!
 	url, err := url.Parse(id)
 	if err != nil {
 		telemetry.Error(err, "parsing public key ID [%s]", id)
 		return nil
 	}
 	url.Fragment = "" // remove the fragment
-	r, err := ai.pipeline.ActivityRequest("GET", url.String(), nil)
+
+	actor, err := ai.GetActor(url.String())
 	if err != nil {
-		telemetry.Error(err, "creating request")
+		telemetry.Error(err, "fetching remote actor")
 		return nil
 	}
-	resp, err := ai.pipeline.client.Do(r)
-	if err != nil {
-		telemetry.Error(err, "fetching remote actor endpoint [%s]", url)
-		return nil
-	}
-	var actor activity.Actor
-	decoder := json.NewDecoder(resp.Body)
-	if err := decoder.Decode(&actor); err != nil {
-		telemetry.Error(err, "decoding json body")
-		return nil
-	}
+
 	if actor.ID != url.String() {
 		telemetry.Error(err, "remote actor ID [%s] doesn't match [%s]", actor.ID, url.String())
 		return nil

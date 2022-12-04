@@ -1,13 +1,18 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/karlseguin/ccache/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -70,9 +75,10 @@ func TestInbox_Follow(t *testing.T) {
 	var remoteID string
 
 	inbox := ActivityInbox{
-		id:       "test",
-		ownerID:  id,
-		pipeline: pipeline,
+		id:         "test",
+		ownerID:    id,
+		pipeline:   pipeline,
+		actorCache: ccache.New(ccache.Configure[activity.Actor]()),
 	}
 
 	// Simulate the remote inbox
@@ -157,9 +163,10 @@ func TestInbox_UnFollow(t *testing.T) {
 	var remoteID string
 
 	inbox := ActivityInbox{
-		id:       "test",
-		ownerID:  id,
-		pipeline: pipeline,
+		id:         "test",
+		ownerID:    id,
+		pipeline:   pipeline,
+		actorCache: ccache.New(ccache.Configure[activity.Actor]()),
 	}
 
 	// Simulate the remote inbox
@@ -225,4 +232,37 @@ func TestInbox_UnFollow(t *testing.T) {
 	pipeline.Flush() // wait for queued requests to finish
 
 	database.AssertExpectations(t)
+}
+
+type mockLoader struct {
+	mock.Mock
+}
+
+func (m *mockLoader) GetActorPublicKey(id string) crypto.PublicKey {
+	args := m.Called(id)
+	if k, ok := args.Get(0).(crypto.PublicKey); ok {
+		return k
+	}
+	return nil
+}
+
+func TestSignAndVerify(t *testing.T) {
+	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	body := bytes.NewBuffer([]byte("test body content"))
+	pubKeyID := "abc"
+	r := httptest.NewRequest("POST", "http://127.0.0.1", body)
+	r.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
+	r.Header.Set("Host", "testhost")
+
+	sign(privKey, pubKeyID, r)
+	assert.NotEmpty(t, r.Header.Get("Digest"))
+	assert.NotEmpty(t, r.Header.Get("Signature"))
+
+	loader := &mockLoader{}
+	loader.On("GetActorPublicKey", pubKeyID).Return(&privKey.PublicKey)
+
+	assert.NoError(t, verify(loader, r))
+	loader.AssertExpectations(t)
 }

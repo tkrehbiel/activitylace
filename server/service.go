@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/karlseguin/ccache/v3"
+	"github.com/tkrehbiel/activitylace/server/activity"
 	"github.com/tkrehbiel/activitylace/server/page"
 	"github.com/tkrehbiel/activitylace/server/storage"
 	"github.com/tkrehbiel/activitylace/server/telemetry"
@@ -200,12 +202,13 @@ func NewService(cfg Config) ActivityService {
 		}
 
 		serverUser.inbox = ActivityInbox{
-			id:        path.Join(svc.meta.URL, fmt.Sprintf("%s/%s/inbox", page.SubPath, usercfg.Name)),
-			ownerID:   serverUser.meta.UserID,
-			followers: store.(storage.Followers),
-			pipeline:  svc.Pipeline,
-			privKey:   serverUser.privKey,
-			pubKeyID:  umeta.UserPublicKeyID,
+			id:         path.Join(svc.meta.URL, fmt.Sprintf("%s/%s/inbox", page.SubPath, usercfg.Name)),
+			ownerID:    serverUser.meta.UserID,
+			followers:  store.(storage.Followers),
+			pipeline:   svc.Pipeline,
+			privKey:    serverUser.privKey,
+			pubKeyID:   umeta.UserPublicKeyID,
+			actorCache: ccache.New(ccache.Configure[activity.Actor]()),
 		}
 
 		if err := serverUser.store.Open(); err != nil {

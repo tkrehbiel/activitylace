@@ -101,6 +101,7 @@ func NewPipeline() *OutputPipeline {
 }
 
 func (s *OutputPipeline) ActivityRequest(method string, url string, v any) (*http.Request, error) {
+	// TODO: Make this a global function that doesn't require a pipeline
 	var reader io.Reader
 	if v != nil {
 		body, err := json.Marshal(v)
@@ -118,40 +119,4 @@ func (s *OutputPipeline) ActivityRequest(method string, url string, v any) (*htt
 	r.Header.Set("Host", s.host)
 	r.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
 	return r, nil
-}
-
-// LookupActor finds the remote endpoint for the actor ID, which is assumed to be a URL
-// Blocks until we get a response or the context is cancelled or times out
-func (s *OutputPipeline) LookupActor(ctx context.Context, id string) (*activity.Actor, error) {
-	telemetry.Trace("looking up actor %s", id)
-
-	var actor activity.Actor
-	r, err := http.NewRequest(http.MethodGet, id, nil)
-	if err != nil {
-		return nil, err
-	}
-	r.Header.Set("Accept", activity.ContentType) // make sure we get a json response
-
-	// TODO: maybe support webfingering an acct:x@y resource too
-	// TODO: make this more asynchronous, and (optionally?) cache the results locally
-	// TODO: retry periodically
-
-	// TODO: My pipeline isn't working with channels, gets caught in race conditions... fix that.
-	// Although for this particular function a synchronous call and response is okay.
-	var respErr error
-	s.SendAndWait(r, func(resp *http.Response) {
-		// On getting a response...
-		jsonBytes, err := io.ReadAll(io.LimitReader(resp.Body, 4000))
-		if err != nil {
-			respErr = fmt.Errorf("reading response bytes: %w", err)
-			return
-		}
-		respErr = json.Unmarshal(jsonBytes, &actor)
-	})
-
-	if respErr != nil {
-		telemetry.Error(err, "looking up user ID [%s]", id)
-		return nil, respErr
-	}
-	return &actor, nil
 }
