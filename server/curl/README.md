@@ -8,6 +8,6 @@ curl -v --request "POST" --header "Content-Type: application/ld+json" --data @pa
 Creating public/private keys for activitypub users:
 
 ```
-openssl genrsa -out private.pem 4096
+openssl genrsa -out private.pem 2048
 openssl rsa -in private.pem -outform PEM -pubout -out public.pem
 ```

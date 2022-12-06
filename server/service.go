@@ -163,16 +163,24 @@ func NewService(cfg Config) ActivityService {
 				continue
 			}
 
-			var key any
-			key, err = x509.ParsePKCS8PrivateKey(p.Bytes)
-			if err != nil {
-				key, err = x509.ParsePKCS1PrivateKey(p.Bytes)
+			switch p.Type {
+			case "PRIVATE KEY":
+				key, err := x509.ParsePKCS8PrivateKey(p.Bytes)
 				if err != nil {
-					telemetry.Error(err, "parsing private key file [%s]", usercfg.PrivKeyFile)
+					telemetry.Error(err, "parsing PKCS8 private key file [%s]", usercfg.PrivKeyFile)
 					continue
 				}
+				serverUser.privKey = key
+			case "RSA PRIVATE KEY":
+				key, err := x509.ParsePKCS1PrivateKey(p.Bytes)
+				if err != nil {
+					telemetry.Error(err, "parsing PKCS1 private key file [%s]", usercfg.PrivKeyFile)
+					continue
+				}
+				serverUser.privKey = key
+			default:
+				telemetry.Error(nil, "unknown private key type %s in file [%s]", p.Type, usercfg.PrivKeyFile)
 			}
-			serverUser.privKey = key
 		}
 
 		if usercfg.PubKeyFile != "" {
@@ -202,13 +210,14 @@ func NewService(cfg Config) ActivityService {
 		}
 
 		serverUser.inbox = ActivityInbox{
-			id:         path.Join(svc.meta.URL, fmt.Sprintf("%s/%s/inbox", page.SubPath, usercfg.Name)),
-			ownerID:    serverUser.meta.UserID,
-			followers:  store.(storage.Followers),
-			pipeline:   svc.Pipeline,
-			privKey:    serverUser.privKey,
-			pubKeyID:   umeta.UserPublicKeyID,
-			actorCache: ccache.New(ccache.Configure[activity.Actor]()),
+			id:             path.Join(svc.meta.URL, fmt.Sprintf("%s/%s/inbox", page.SubPath, usercfg.Name)),
+			ownerID:        serverUser.meta.UserID,
+			followers:      store.(storage.Followers),
+			pipeline:       svc.Pipeline,
+			privKey:        serverUser.privKey,
+			pubKeyID:       umeta.UserPublicKeyID,
+			actorCache:     ccache.New(ccache.Configure[activity.Actor]()),
+			acceptUnsigned: cfg.Server.AcceptAll,
 		}
 
 		if err := serverUser.store.Open(); err != nil {

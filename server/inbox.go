@@ -22,13 +22,14 @@ import (
 )
 
 type ActivityInbox struct {
-	id         string
-	ownerID    string // id of the owner of the inbox
-	followers  storage.Followers
-	pipeline   *OutputPipeline
-	privKey    crypto.PrivateKey
-	pubKeyID   string
-	actorCache *ccache.Cache[activity.Actor]
+	id             string
+	ownerID        string // id of the owner of the inbox
+	followers      storage.Followers
+	pipeline       *OutputPipeline
+	privKey        crypto.PrivateKey
+	pubKeyID       string
+	actorCache     *ccache.Cache[activity.Actor]
+	acceptUnsigned bool
 }
 
 // GetHTTP handles GET requests to the inbox, which we don't do
@@ -60,10 +61,12 @@ func (ai *ActivityInbox) PostHTTP(w http.ResponseWriter, r *http.Request) {
 
 	telemetry.Increment("post_requests", 1)
 
-	if err := verify(ai, r); err != nil {
-		telemetry.Error(err, "verifying signature")
-		w.WriteHeader(http.StatusUnauthorized)
-		return
+	if !ai.acceptUnsigned {
+		if err := verify(ai, r); err != nil {
+			telemetry.Error(err, "verifying signature")
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 	}
 
 	jsonBytes, err := io.ReadAll(io.LimitReader(r.Body, 4000))
@@ -449,7 +452,7 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 	prefs := []httpsig.Algorithm{httpsig.RSA_SHA256}
 	digestAlgorithm := httpsig.DigestSha256
 	headersToSign := []string{httpsig.RequestTarget, "digest", "date", "host"}
-	signer, _, err := httpsig.NewSigner(prefs, digestAlgorithm, headersToSign, httpsig.Signature, int64(time.Hour))
+	signer, _, err := httpsig.NewSigner(prefs, digestAlgorithm, headersToSign, httpsig.Signature, 0)
 	if err != nil {
 		return err
 	}
