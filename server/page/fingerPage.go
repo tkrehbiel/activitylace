@@ -35,7 +35,7 @@ var WebFingerAccount = StaticPage{
 	"links": [
 		{
 			"rel": "self",
-			"type": "application/ld+json",
+			"type": "application/activity+json",
 			"href": "{{ .UserID }}"
 		},
 		{
