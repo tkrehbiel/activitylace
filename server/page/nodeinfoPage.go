@@ -19,7 +19,7 @@ var WellKnownNodeInfo = StaticPage{
 
 var NodeInfo = StaticPage{
 	Path:        "/.well-known/nodeinfo/2.1",
-	Accept:      "application/json",
+	Accept:      "*/*",
 	ContentType: "application/json",
 	Template: `
 {

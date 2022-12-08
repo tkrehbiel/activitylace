@@ -255,7 +255,7 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, `<html><title>activitylace</title>
 <body>
-<p>This is <a href=\"https://github.com/tkrehbiel/activitylace/\">activitylace</a>,
+<p>This is <a href="https://github.com/tkrehbiel/activitylace/">activitylace</a>,
 an experimental ActivityPub server implementation to complement static blogs.
 There's nothing to see here.</p>
 </body>

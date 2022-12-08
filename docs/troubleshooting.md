@@ -61,14 +61,16 @@ Dec  3 03:34:42 localhost pleroma[167754]: 03:34:42.843 request_id=Fy0rJt2ffaarr
 
 Maybe a following/follower collection implemention is required? Still might be a signature though.
 
+Update 12/6/2022: I implemented http signatures and it didn't help. Don't yet know what the problem is. Hard to debug.
+
 ## Mastodon returns 401 from Accept
 
-On sending the Accept activity to the remote server after receiving a Follow activity, Mastodon returns a 401 Unauthorized.
+Similar to Pleroma, on sending the Accept activity to the remote server after receiving a Follow activity, Mastodon returns a 401 Unauthorized.
 
-Theory: Signatures not implemented?
+12/6/2022 At first I thought it was because signatures weren't implemented. So I went ahead and implemented http signatures, but Mastodon still doesn't recognize them, and it returns the following error in the body: `Verification failed for [user@domain https://id] using rsa-sha256 (RSASSA-PKCS1-v1_5 with SHA-256)`. It's great for me that it did, but it seems like it's a lot more information than it should be putting into an error response. Generally you don't want to expose too much of that over a public channel.
 
-So I've implemented http signatures, but Mastodon doesn't recognize them yet.
+I'm using `github.com/go-fed/httpsig` to create and verify signatures. It successfully _verifies_ signatures from Mastodon (and Pleroma). I did an independent functional test with a web site https://dinochiesa.github.io/httpsig/ which verifies http signatures online, and my signatures seemed to work, although it wasn't possible to test `(request-header)`. I'm stumped. Will probably have to resort to reading [the Mastodon source code](https://github.com/mastodon/mastodon/blob/main/app/controllers/concerns/signature_verification.rb#L78). (It didn't help.)
 
-## Mastodon and @context https://w3id.org/security/v1
+## Mastodon and `@context https://w3id.org/security/v1`
 
 Mastodon [gives the example](https://blog.joinmastodon.org/2018/06/how-to-implement-a-basic-activitypub-server/) of endpoints including the https://w3id.org/security/v1 context which I think is intended to define the `publicKey` extension, but [the actual spec](https://w3c.github.io/vc-data-integrity/vocab/security/vocabulary.html) does not define a publicKey block like Mastodon uses. The spec defines the `publicKey` as a URL to a key, not a block of metadata. So I'm not sure it makes sense to include https://w3id.org/security/v1 in the @context. Then again, it's almost impossible to figure out JSON-LD schemas.
