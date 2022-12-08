@@ -180,6 +180,7 @@ func NewService(cfg Config) ActivityService {
 				serverUser.privKey = key
 			default:
 				telemetry.Error(nil, "unknown private key type %s in file [%s]", p.Type, usercfg.PrivKeyFile)
+				continue
 			}
 		}
 
@@ -225,6 +226,8 @@ func NewService(cfg Config) ActivityService {
 		} else {
 			svc.users = append(svc.users, serverUser)
 		}
+
+		telemetry.Trace("user %s initialized", serverUser.name)
 	}
 
 	// configure web handlers
@@ -237,6 +240,8 @@ func NewService(cfg Config) ActivityService {
 		ReadTimeout:  time.Second * 15,
 		IdleTimeout:  time.Second * 60,
 	}
+
+	telemetry.Trace("service initialized")
 	return svc
 }
 
