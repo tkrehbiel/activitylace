@@ -67,17 +67,17 @@ func (s *ActivityService) addHandlers() {
 		outpath := fmt.Sprintf("/%s/%s/outbox", page.SubPath, user.name)
 		route := s.router.HandleFunc(outpath, RequestLogger{Handler: user.outbox.ServeHTTP}.ServeHTTP).Methods("GET") // TODO: filter by Accept
 		if !s.Config.Server.AcceptAll {
-			route.HeadersRegexp("Accept", "application/.*json")
+			route.HeadersRegexp("Accept", "application/(activity|ld)+json")
 		}
 
 		inpath := fmt.Sprintf("/%s/%s/inbox", page.SubPath, user.name)
 		route = s.router.HandleFunc(inpath, RequestLogger{Handler: user.inbox.GetHTTP}.ServeHTTP).Methods("GET") // TODO: filter by Accept
 		if !s.Config.Server.AcceptAll {
-			route.HeadersRegexp("Accept", "application/.*json")
+			route.HeadersRegexp("Accept", "application/(activity|ld)+json")
 		}
 		route = s.router.HandleFunc(inpath, RequestLogger{Handler: user.inbox.PostHTTP}.ServeHTTP).Methods("POST")
 		if !s.Config.Server.AcceptAll {
-			route.HeadersRegexp("Accept", "application/.*json")
+			route.HeadersRegexp("Accept", "application/(activity|ld)+json")
 		}
 
 	}
@@ -89,7 +89,7 @@ func (s *ActivityService) addPageHandler(pg page.StaticPageHandler, meta any) {
 	pg.Init(meta)
 	router := s.router.HandleFunc(pg.Path(), RequestLogger{Handler: pg.ServeHTTP}.ServeHTTP).Methods("GET")
 	if !s.Config.Server.AcceptAll && pg.Accept() != "" && pg.Accept() != "*/*" {
-		router.Headers("Accept", pg.Accept())
+		router.HeadersRegexp("Accept", pg.Accept())
 	}
 }
 

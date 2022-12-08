@@ -74,3 +74,25 @@ I'm using `github.com/go-fed/httpsig` to create and verify signatures. It succes
 ## Mastodon and `@context https://w3id.org/security/v1`
 
 Mastodon [gives the example](https://blog.joinmastodon.org/2018/06/how-to-implement-a-basic-activitypub-server/) of endpoints including the https://w3id.org/security/v1 context which I think is intended to define the `publicKey` extension, but [the actual spec](https://w3c.github.io/vc-data-integrity/vocab/security/vocabulary.html) does not define a publicKey block like Mastodon uses. The spec defines the `publicKey` as a URL to a key, not a block of metadata. So I'm not sure it makes sense to include https://w3id.org/security/v1 in the @context. Then again, it's almost impossible to figure out JSON-LD schemas.
+
+## Mastodon doesn't recognize a webfinger account
+
+Mastodon is very picky that the webfinger `rel=self` link is identified with type `application/activity+json` instead of `application/ld+json` (which is the actual type of the ActivityPub document at that url).
+
+```
+	"links": [
+		{
+			"rel": "self",
+			"type": "application/activity+json",
+			"href": "__"
+		}
+    ]
+```
+
+NOT:
+
+```
+"type": "application/ld+json",
+```
+
+ActivityPub is quite clear that `application/ld+json` support is required and `application/activity+json` is optional. But then webfinger or any kind of remote discovery isn't part of ActivityPub anyway.
