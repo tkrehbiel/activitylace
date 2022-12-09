@@ -29,7 +29,8 @@ If this doesn't run on the same server, the blog server will have to redirect we
 
 ## Phase 2, Followers
 
-- The blog actor's Inbox will receive follow POST requests.
+- ~~The blog actor's Inbox will receive follow POST requests.~~
+- The inbox will respond to follow requests with an Accept or Reject activity. (This is a monster, and the hardest part so far, as it requires figuring out the exact type of POST that (at least) Mastodon will accept, which has requirements far beyond what ActivityPub documents.)
 - The blog actor's Outbox will notify followers of new posts by POSTing to remote servers. (See: Rate-limited output messaging pipeline.)
 - May require POST requests to be signed in some way to avoid spam. Need to investigate how that works. (I don't think there's a standard for this in ActivityPub.)
 - Follows from blocked actors will be discarded.

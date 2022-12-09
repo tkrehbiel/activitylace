@@ -71,6 +71,8 @@ Similar to Pleroma, on sending the Accept activity to the remote server after re
 
 I'm using `github.com/go-fed/httpsig` to create and verify signatures. It successfully _verifies_ signatures from Mastodon (and Pleroma). I did an independent functional test with a web site https://dinochiesa.github.io/httpsig/ which verifies http signatures online, and my signatures seemed to work, although it wasn't possible to test `(request-header)`. I'm stumped. Will probably have to resort to reading [the Mastodon source code](https://github.com/mastodon/mastodon/blob/main/app/controllers/concerns/signature_verification.rb#L78). (It didn't help.)
 
+This contains links that may help: https://www.drupal.org/project/activitypub/issues/3179629
+
 ## Mastodon and `@context https://w3id.org/security/v1`
 
 Mastodon [gives the example](https://blog.joinmastodon.org/2018/06/how-to-implement-a-basic-activitypub-server/) of endpoints including the https://w3id.org/security/v1 context which I think is intended to define the `publicKey` extension, but [the actual spec](https://w3c.github.io/vc-data-integrity/vocab/security/vocabulary.html) does not define a publicKey block like Mastodon uses. The spec defines the `publicKey` as a URL to a key, not a block of metadata. So I'm not sure it makes sense to include https://w3id.org/security/v1 in the @context. Then again, it's almost impossible to figure out JSON-LD schemas.

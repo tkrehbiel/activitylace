@@ -21,6 +21,8 @@ import (
 	"github.com/tkrehbiel/activitylace/server/telemetry"
 )
 
+// TODO: This file is way too big
+
 type ActivityInbox struct {
 	id             string
 	ownerID        string // id of the owner of the inbox
@@ -452,7 +454,8 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 	prefs := []httpsig.Algorithm{httpsig.RSA_SHA256}
 	digestAlgorithm := httpsig.DigestSha256
 	headersToSign := []string{httpsig.RequestTarget, "digest", "date", "host"}
-	signer, _, err := httpsig.NewSigner(prefs, digestAlgorithm, headersToSign, httpsig.Signature, 0)
+	// ugh "expiresIn" is in units of seconds and nobody told me that
+	signer, _, err := httpsig.NewSigner(prefs, digestAlgorithm, headersToSign, httpsig.Signature, 60*60)
 	if err != nil {
 		return err
 	}
@@ -484,8 +487,8 @@ type publicKeyLoader interface {
 	GetActorPublicKey(id string) crypto.PublicKey
 }
 
-// LookupActor finds the remote endpoint for the actor ID, which is assumed to be a URL
-// Blocks until we get a response or the context is cancelled or times out
+// GetActor finds the remote endpoint for the actor ID, which is assumed to be a URL.
+// Blocks until we get a response or the context is cancelled or times out.
 func (ai *ActivityInbox) GetActor(id string) (*activity.Actor, error) {
 	item := ai.actorCache.Get(id)
 	if item != nil && !item.Expired() {

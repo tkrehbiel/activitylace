@@ -67,17 +67,17 @@ func (s *ActivityService) addHandlers() {
 		outpath := fmt.Sprintf("/%s/%s/outbox", page.SubPath, user.name)
 		route := s.router.HandleFunc(outpath, RequestLogger{Handler: user.outbox.ServeHTTP}.ServeHTTP).Methods("GET") // TODO: filter by Accept
 		if !s.Config.Server.AcceptAll {
-			route.HeadersRegexp("Accept", "application/(activity|ld)+json")
+			route.HeadersRegexp("Accept", "application/.*json")
 		}
 
 		inpath := fmt.Sprintf("/%s/%s/inbox", page.SubPath, user.name)
 		route = s.router.HandleFunc(inpath, RequestLogger{Handler: user.inbox.GetHTTP}.ServeHTTP).Methods("GET") // TODO: filter by Accept
 		if !s.Config.Server.AcceptAll {
-			route.HeadersRegexp("Accept", "application/(activity|ld)+json")
+			route.HeadersRegexp("Accept", "application/.*json")
 		}
 		route = s.router.HandleFunc(inpath, RequestLogger{Handler: user.inbox.PostHTTP}.ServeHTTP).Methods("POST")
 		if !s.Config.Server.AcceptAll {
-			route.HeadersRegexp("Content-Type", "application/(activity|ld)+json")
+			route.HeadersRegexp("Content-Type", "application/.*json")
 		}
 
 	}
