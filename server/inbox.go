@@ -3,7 +3,10 @@ package server
 import (
 	"bytes"
 	"crypto"
+	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -451,20 +454,50 @@ func jsonReader(v any) io.Reader {
 
 // sign an http request with a public and private key
 func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error {
-	prefs := []httpsig.Algorithm{httpsig.RSA_SHA256}
-	digestAlgorithm := httpsig.DigestSha256
-	headersToSign := []string{httpsig.RequestTarget, "digest", "date", "host"}
-	// ugh "expiresIn" is in units of seconds and nobody told me that
-	signer, _, err := httpsig.NewSigner(prefs, digestAlgorithm, headersToSign, httpsig.Signature, 60*60)
-	if err != nil {
-		return err
+	// I'm genuinely unsure if go-fed/httpsig signature generation works right,
+	// so I'm generating this signature manually.
+
+	rsa, ok := privateKey.(crypto.Signer)
+	if !ok {
+		return fmt.Errorf("cannot sign with this private key")
 	}
-	// To sign the digest, we need to give the signer a copy of the body
+
 	body, _ := io.ReadAll(r.Body)
 	defer r.Body.Close()
 	r.Body = io.NopCloser(bytes.NewBuffer(body)) // replace body since we read it
-	// If r were a http.ResponseWriter, call SignResponse instead.
-	return signer.SignRequest(privateKey, pubKeyId, r, body)
+
+	// Generate digest of request body to include in the signature
+	digest := sha256.New()
+	digest.Write(body)
+	encoded64 := base64.StdEncoding.EncodeToString(digest.Sum(nil))
+	r.Header.Add("Digest", fmt.Sprintf("SHA-256=%s", encoded64))
+
+	// Generate the signing string from headers
+	signingStrings := make([]string, 0)
+	signedHeaders := []string{"(request-target)", "digest", "host", "date"}
+	for _, hdr := range signedHeaders {
+		var toSign string
+		switch hdr {
+		case "(request-target)":
+			toSign = fmt.Sprintf("(request-target): %s %s", strings.ToLower(r.Method), r.URL.Path)
+		default:
+			toSign = fmt.Sprintf("%s: %s", strings.ToLower(hdr), strings.TrimSpace(r.Header.Get(hdr)))
+		}
+		signingStrings = append(signingStrings, toSign)
+	}
+	signingString := strings.Join(signingStrings, "\n")
+
+	// Create the signature of the signing string
+	sigHash := sha256.New()
+	sigHash.Write([]byte(signingString))
+	signature, err := rsa.Sign(rand.Reader, sigHash.Sum(nil), crypto.SHA256)
+	if err != nil {
+		return err
+	}
+	signature64 := base64.StdEncoding.EncodeToString(signature)
+	r.Header.Add("Signature", fmt.Sprintf(`keyId="%s",algorithm="hs2019",created=%d,headers="%s",signature="%s"`,
+		pubKeyId, time.Now().UTC().Unix(), strings.Join(signedHeaders, " "), signature64))
+	return nil
 }
 
 // verify a signed http request, returns an err if the validation fails or nil on success

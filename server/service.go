@@ -65,17 +65,17 @@ func (s *ActivityService) addHandlers() {
 		s.addPageHandler(page.NewStaticPage(pg), user.meta)
 
 		outpath := fmt.Sprintf("/%s/%s/outbox", page.SubPath, user.name)
-		route := s.router.HandleFunc(outpath, RequestLogger{Handler: user.outbox.ServeHTTP}.ServeHTTP).Methods("GET") // TODO: filter by Accept
+		route := s.router.HandleFunc(outpath, user.outbox.ServeHTTP).Methods("GET") // TODO: filter by Accept
 		if !s.Config.Server.AcceptAll {
 			route.HeadersRegexp("Accept", "application/.*json")
 		}
 
 		inpath := fmt.Sprintf("/%s/%s/inbox", page.SubPath, user.name)
-		route = s.router.HandleFunc(inpath, RequestLogger{Handler: user.inbox.GetHTTP}.ServeHTTP).Methods("GET") // TODO: filter by Accept
+		route = s.router.HandleFunc(inpath, user.inbox.GetHTTP).Methods("GET") // TODO: filter by Accept
 		if !s.Config.Server.AcceptAll {
 			route.HeadersRegexp("Accept", "application/.*json")
 		}
-		route = s.router.HandleFunc(inpath, RequestLogger{Handler: user.inbox.PostHTTP}.ServeHTTP).Methods("POST")
+		route = s.router.HandleFunc(inpath, user.inbox.PostHTTP).Methods("POST")
 		if !s.Config.Server.AcceptAll {
 			route.HeadersRegexp("Content-Type", "application/.*json")
 		}
@@ -87,7 +87,7 @@ func (s *ActivityService) addHandlers() {
 
 func (s *ActivityService) addPageHandler(pg page.StaticPageHandler, meta any) {
 	pg.Init(meta)
-	router := s.router.HandleFunc(pg.Path(), RequestLogger{Handler: pg.ServeHTTP}.ServeHTTP).Methods("GET")
+	router := s.router.HandleFunc(pg.Path(), pg.ServeHTTP).Methods("GET")
 	if !s.Config.Server.AcceptAll && pg.Accept() != "" && pg.Accept() != "*/*" {
 		router.HeadersRegexp("Accept", pg.Accept())
 	}
@@ -233,6 +233,9 @@ func NewService(cfg Config) ActivityService {
 	// configure web handlers
 	svc.addHandlers()
 
+	// Log all requests in the router without having to explicitly do so
+	svc.router.Use(RequestLoggerMiddleware(svc.router))
+
 	svc.Server = http.Server{
 		Handler:      svc.router,
 		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
@@ -243,15 +246,6 @@ func NewService(cfg Config) ActivityService {
 
 	telemetry.Trace("service initialized")
 	return svc
-}
-
-type RequestLogger struct {
-	Handler http.HandlerFunc
-}
-
-func (rl RequestLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	telemetry.Request(r, "incoming")
-	rl.Handler(w, r)
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
@@ -265,4 +259,16 @@ an experimental ActivityPub server implementation to complement static blogs.
 There's nothing to see here.</p>
 </body>
 </html>`)
+}
+
+func RequestLoggerMiddleware(r *mux.Router) mux.MiddlewareFunc {
+	// This logs all requests that go through the router
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			defer func() {
+				telemetry.Request(req, "")
+			}()
+			next.ServeHTTP(w, req)
+		})
+	}
 }

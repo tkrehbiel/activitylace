@@ -6,9 +6,12 @@ import (
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -249,18 +252,37 @@ func (m *mockLoader) GetActorPublicKey(id string) crypto.PublicKey {
 }
 
 func TestSignAndVerify_Self(t *testing.T) {
+	// Test that sign and verify works with a generated key
 	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
-	body := bytes.NewBuffer([]byte("test body content"))
+	content := []byte("test body content")
+
+	digest := sha256.New()
+	digest.Write(content)
+	encoded64 := base64.StdEncoding.EncodeToString(digest.Sum(nil))
+	expectedDigest := fmt.Sprintf("SHA-256=%s", encoded64)
+
+	body := bytes.NewBuffer(content)
 	pubKeyID := "abc"
 	r := httptest.NewRequest("POST", "http://127.0.0.1", body)
 	r.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
 	r.Header.Set("Host", "testhost")
 
-	sign(privKey, pubKeyID, r)
+	err = sign(privKey, pubKeyID, r)
+	require.NoError(t, err)
 	assert.NotEmpty(t, r.Header.Get("Digest"))
 	assert.NotEmpty(t, r.Header.Get("Signature"))
+	assert.Equal(t, expectedDigest, r.Header.Get("Digest"))
+	// silly way of checking these
+	assert.Contains(t, r.Header.Get("Signature"), "hs2019")
+	assert.Contains(t, r.Header.Get("Signature"), "(request-target)")
+	assert.Contains(t, r.Header.Get("Signature"), "host")
+	assert.Contains(t, r.Header.Get("Signature"), "date")
+	assert.Contains(t, r.Header.Get("Signature"), "digest")
+
+	fmt.Println(r.Header.Get("Digest"))
+	fmt.Println(r.Header.Get("Signature"))
 
 	loader := &mockLoader{}
 	loader.On("GetActorPublicKey", pubKeyID).Return(&privKey.PublicKey)
@@ -313,6 +335,7 @@ L3Uw2eCes/iJ5PGDEyboezuSTtMXi43Q0pcLysWG+Ip+xWOzFfPzicWF3264QsBe
 )
 
 func TestSignAndVerify_External(t *testing.T) {
+	// test that sign and verify works with an external key pem
 	privBlock, _ := pem.Decode([]byte(testPrivateKey))
 	require.NotNil(t, privBlock)
 	pubBlock, _ := pem.Decode([]byte(testPublicKey))
