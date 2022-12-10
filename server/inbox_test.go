@@ -268,6 +268,7 @@ func TestSignAndVerify_Self(t *testing.T) {
 	r := httptest.NewRequest("POST", "http://127.0.0.1", body)
 	r.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
 	r.Header.Set("Host", "testhost")
+	r.Header.Set("Content-Type", "application/activity+json")
 
 	err = sign(privKey, pubKeyID, r)
 	require.NoError(t, err)
@@ -353,6 +354,7 @@ func TestSignAndVerify_External(t *testing.T) {
 	r := httptest.NewRequest("POST", "http://127.0.0.1", body)
 	r.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
 	r.Header.Set("Host", "testhost")
+	r.Header.Set("Content-Type", "application/activity+json")
 
 	sign(privKey, pubKeyID, r)
 	assert.NotEmpty(t, r.Header.Get("Digest"))

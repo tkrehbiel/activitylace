@@ -474,7 +474,7 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 
 	// Generate the signing string from headers
 	signingStrings := make([]string, 0)
-	signedHeaders := []string{"(request-target)", "digest", "host", "date"}
+	signedHeaders := []string{"(request-target)", "host", "date", "digest", "content-type"}
 	for _, hdr := range signedHeaders {
 		var toSign string
 		switch hdr {

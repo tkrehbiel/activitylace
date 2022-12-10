@@ -116,6 +116,7 @@ func (s *OutputPipeline) ActivityRequest(method string, url string, v any) (*htt
 		return nil, fmt.Errorf("creating ActivityPub request: %w", err)
 	}
 	r.Header.Set("User-Agent", "Activitylace/0.1 (+https://github.com/tkrehbiel/activitylace)")
+	r.Header.Set("Content-Type", activity.ContentType)
 	r.Header.Set("Accept", activity.ContentType)
 	r.Header.Set("Host", s.host)
 	r.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
