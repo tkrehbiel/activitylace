@@ -477,7 +477,7 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 
 	// Generate the signing string from headers
 	signingStrings := make([]string, 0)
-	signedHeaders := []string{"(request-target)", "host", "date", "digest", "content-type"}
+	signedHeaders := []string{"(request-target)", "host", "date", "digest", "content-type", "created", "expires"}
 	for _, hdr := range signedHeaders {
 		var s string
 		switch hdr {
@@ -502,8 +502,8 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 		return err
 	}
 	signature64 := base64.StdEncoding.EncodeToString(signature)
-	r.Header.Add("Signature", fmt.Sprintf(`keyId="%s",algorithm="hs2019",created=%d,headers="%s",signature="%s"`,
-		pubKeyId, created.Unix(), strings.Join(signedHeaders, " "), signature64))
+	r.Header.Add("Signature", fmt.Sprintf(`keyId="%s",algorithm="hs2019",headers="%s",signature="%s"`,
+		pubKeyId, strings.Join(signedHeaders, " "), signature64))
 	return nil
 }
 
