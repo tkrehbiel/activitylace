@@ -79,6 +79,8 @@ It's not a typo because it then goes on to say: "This request is functionally eq
 
 I think it's just a misunderstanding of how it works, because the code uses `keypair.sign` and surely the makers of Ruby know to sign with the private key instead of the public key.
 
+I tried to use `rsa.SignPKCS1v15` instead of `privKey.Sign` and it fared no better or worse.
+
 ## Mastodon and `@context https://w3id.org/security/v1`
 
 Mastodon [gives the example](https://blog.joinmastodon.org/2018/06/how-to-implement-a-basic-activitypub-server/) of endpoints including the https://w3id.org/security/v1 context which I think is intended to define the `publicKey` extension, but [the actual spec](https://w3c.github.io/vc-data-integrity/vocab/security/vocabulary.html) does not define a publicKey block like Mastodon uses. The spec defines the `publicKey` as a URL to a key, not a block of metadata. So I'm not sure it makes sense to include https://w3id.org/security/v1 in the @context. Then again, it's almost impossible to figure out JSON-LD schemas.
@@ -112,6 +114,8 @@ ActivityPub is quite clear that `application/ld+json` support is required and `a
 Pixelfed: `Signature: keyId="individual user#main-key",headers="(request-target) date host accept digest content-type user-agent",algorithm="rsa-sha256",signature="..."`
 
 Friendica: `Signature: keyId="server instance#main-key",algorithm="rsa-sha256",headers="(request-target) date host",signature="..."`
+
+Pixelfed and Friendica both succeed without an http signature.
 
 For comparison (these don't yet work):
 

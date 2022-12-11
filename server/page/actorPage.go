@@ -4,7 +4,7 @@ package page
 var ActorEndpoint = StaticPage{
 	Path:        "", // must be set for each actor
 	Accept:      "application/(activity|ld)+json",
-	ContentType: "application/ld+json",
+	ContentType: "application/activity+json",
 	Template: `
 {
 	"@context": [
