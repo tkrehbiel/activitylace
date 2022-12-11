@@ -462,9 +462,10 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 		return fmt.Errorf("cannot sign with this private key")
 	}
 
+	// Read and replace the request body so we can create a digest
 	body, _ := io.ReadAll(r.Body)
 	defer r.Body.Close()
-	r.Body = io.NopCloser(bytes.NewBuffer(body)) // replace body since we read it
+	r.Body = io.NopCloser(bytes.NewBuffer(body))
 
 	// Generate digest of request body to include in the signature
 	digest := sha256.New()
@@ -476,16 +477,17 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 	signingStrings := make([]string, 0)
 	signedHeaders := []string{"(request-target)", "host", "date", "digest", "content-type"}
 	for _, hdr := range signedHeaders {
-		var toSign string
+		var s string
 		switch hdr {
 		case "(request-target)":
-			toSign = fmt.Sprintf("(request-target): %s %s", strings.ToLower(r.Method), r.URL.Path)
+			s = fmt.Sprintf("(request-target): %s %s", strings.ToLower(r.Method), r.URL.Path)
 		default:
-			toSign = fmt.Sprintf("%s: %s", strings.ToLower(hdr), strings.TrimSpace(r.Header.Get(hdr)))
+			s = fmt.Sprintf("%s: %s", hdr, r.Header.Get(hdr))
 		}
-		signingStrings = append(signingStrings, toSign)
+		signingStrings = append(signingStrings, s)
 	}
 	signingString := strings.Join(signingStrings, "\n")
+	telemetry.Trace(signingString)
 
 	// Create the signature of the signing string
 	sigHash := sha256.New()
