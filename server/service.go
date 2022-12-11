@@ -218,7 +218,8 @@ func NewService(cfg Config) ActivityService {
 			privKey:        serverUser.privKey,
 			pubKeyID:       umeta.UserPublicKeyID,
 			actorCache:     ccache.New(ccache.Configure[activity.Actor]()),
-			acceptUnsigned: false,
+			acceptUnsigned: cfg.Server.ReceiveUnsigned,
+			sendUnsigned:   cfg.Server.SendUnsigned,
 		}
 
 		if err := serverUser.store.Open(); err != nil {
@@ -265,9 +266,7 @@ func RequestLoggerMiddleware(r *mux.Router) mux.MiddlewareFunc {
 	// This logs all requests that go through the router
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			defer func() {
-				telemetry.Request(req, "")
-			}()
+			telemetry.Request(req, "")
 			next.ServeHTTP(w, req)
 		})
 	}

@@ -98,3 +98,17 @@ NOT:
 ```
 
 ActivityPub is quite clear that `application/ld+json` support is required and `application/activity+json` is optional. But then webfinger or any kind of remote discovery isn't part of ActivityPub anyway.
+
+## Pixelfed and Friendica Accepted
+
+12/11/2022 For both Follow and Undo Follow, Pixelfed responds with status 200 to the signed Accept activity. For both Follow and Undo Follow, Friendica responds with status 202 to the signed Accept activity.
+
+Pixelfed: `Signature: keyId="individual user#main-key",headers="(request-target) date host accept digest content-type user-agent",algorithm="rsa-sha256",signature="..."`
+
+Friendica: `Signature: keyId="server instance#main-key",algorithm="rsa-sha256",headers="(request-target) date host",signature="..."`
+
+For comparison (these don't yet work):
+
+Pleroma: `Signature: keyId="server instance#main-key",algorithm="rsa-sha256",headers="(request-target) date host",signature="..."`
+
+Mastodon: `Signature: keyId="individual user#main-key",algorithm="rsa-sha256",headers="(request-target) host date digest content-type",signature="..."`

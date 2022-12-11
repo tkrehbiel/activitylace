@@ -5,11 +5,13 @@ import (
 )
 
 type serverConfig struct {
-	HostName    string `json:"host"`
-	Certificate string `json:"certificate"`
-	PrivateKey  string `json:"privatekey"`
-	Port        int    `json:"port"`
-	AcceptAll   bool   `json:"accept_all"` // for debugging
+	HostName        string `json:"host"`
+	Certificate     string `json:"certificate"`
+	PrivateKey      string `json:"privatekey"`
+	Port            int    `json:"port"`
+	AcceptAll       bool   `json:"accept_all"` // for debugging
+	SendUnsigned    bool   `json:"send_unsigned"`
+	ReceiveUnsigned bool   `json:"receive_unsigned"`
 }
 
 func (s serverConfig) useTLS() bool {
