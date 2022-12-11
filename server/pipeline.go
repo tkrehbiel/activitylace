@@ -108,7 +108,6 @@ func (s *OutputPipeline) ActivityRequest(method string, url string, v any) (*htt
 		if err != nil {
 			return nil, fmt.Errorf("marshaling json from object: %w", err)
 		}
-		telemetry.Trace("creating request body %s", string(body))
 		reader = bytes.NewBuffer(body)
 	}
 	r, err := http.NewRequest(method, url, reader)

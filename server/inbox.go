@@ -251,7 +251,7 @@ func (f *FollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error
 		return nil, fmt.Errorf("creating accept request: %w", err)
 	}
 
-	if f.inbox.privKey != nil {
+	if f.inbox.privKey != nil && !f.inbox.sendUnsigned {
 		sign(f.inbox.privKey, f.inbox.pubKeyID, r)
 	}
 
@@ -395,7 +395,7 @@ func (f *UnfollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, err
 		return nil, fmt.Errorf("creating accept request: %w", err)
 	}
 
-	if f.inbox.privKey != nil {
+	if f.inbox.privKey != nil && !f.inbox.sendUnsigned {
 		sign(f.inbox.privKey, f.inbox.pubKeyID, r)
 	}
 
