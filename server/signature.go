@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
@@ -43,7 +44,7 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 	// I'm genuinely unsure if go-fed/httpsig signature generation works right,
 	// so I'm generating this signature manually.
 
-	rsa, ok := privateKey.(crypto.Signer)
+	rsaKey, ok := privateKey.(*rsa.PrivateKey)
 	if !ok {
 		return fmt.Errorf("cannot sign with this private key")
 	}
@@ -63,18 +64,18 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 
 	// I imagine these aren't useful unless the receiver checks them
 	created := time.Now().UTC()
-	expires := created.Add(time.Hour)
 	r.Header.Add("Created", created.Format(http.TimeFormat))
+	expires := created.Add(time.Hour)
 	r.Header.Add("Expires", expires.Format(http.TimeFormat))
 
 	// Create the signature
 	sigHash := sha256.New()
 	sigHash.Write([]byte(signingString))
-	signature, err := rsa.Sign(rand.Reader, sigHash.Sum(nil), crypto.SHA256)
+	signature, err := rsa.SignPKCS1v15(rand.Reader, rsaKey, crypto.SHA256, sigHash.Sum(nil))
 	if err != nil {
 		return err
 	}
-	signature64 := base64.RawStdEncoding.EncodeToString(signature)
+	signature64 := base64.StdEncoding.EncodeToString(signature)
 	r.Header.Add("Signature", fmt.Sprintf(`keyId="%s",algorithm="rsa-sha256",created=%d,expires=%d,headers="%s",signature="%s"`,
 		pubKeyId, created.Unix(), expires.Unix(), strings.Join(signedHeaders, " "), signature64))
 	return nil
