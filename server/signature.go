@@ -20,7 +20,7 @@ import (
 func computeDigest(body []byte) string {
 	hash := sha256.New()
 	hash.Write(body)
-	return base64.RawStdEncoding.EncodeToString(hash.Sum(nil))
+	return base64.StdEncoding.EncodeToString(hash.Sum(nil))
 }
 
 func computeSigningString(signedHeaders []string, r *http.Request) string {
