@@ -467,8 +467,6 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 	defer r.Body.Close()
 	r.Body = io.NopCloser(bytes.NewBuffer(body))
 
-	telemetry.Trace(string(body))
-
 	// Generate digest of request body to include in the signature
 	digest := sha256.New()
 	digest.Write(body)
@@ -489,11 +487,11 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 		signingStrings = append(signingStrings, s)
 	}
 	signingString := strings.Join(signingStrings, "\n")
-	telemetry.Trace(signingString)
 
 	created := time.Now().UTC()
+	expires := created.Add(time.Hour)
 	r.Header.Add("Created", created.Format(http.TimeFormat))
-	r.Header.Add("Expires", created.Add(time.Hour).Format(http.TimeFormat))
+	r.Header.Add("Expires", expires.Format(http.TimeFormat))
 	// Create the signature
 	sigHash := sha256.New()
 	sigHash.Write([]byte(signingString))
@@ -502,8 +500,8 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 		return err
 	}
 	signature64 := base64.StdEncoding.EncodeToString(signature)
-	r.Header.Add("Signature", fmt.Sprintf(`keyId="%s",algorithm="hs2019",headers="%s",signature="%s"`,
-		pubKeyId, strings.Join(signedHeaders, " "), signature64))
+	r.Header.Add("Signature", fmt.Sprintf(`keyId="%s",algorithm="hs2019",created=%d,expires=%d,headers="%s",signature="%s"`,
+		pubKeyId, created.Unix(), expires.Unix(), strings.Join(signedHeaders, " "), signature64))
 	return nil
 }
 
