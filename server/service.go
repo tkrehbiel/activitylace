@@ -1,11 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -21,12 +24,14 @@ import (
 )
 
 type ActivityService struct {
-	Config   Config
-	Server   http.Server
-	Pipeline *OutputPipeline
-	router   *mux.Router
-	meta     page.MetaData
-	users    []ActivityUser
+	Config     Config
+	Server     http.Server
+	Pipeline   *OutputPipeline
+	router     *mux.Router
+	client     http.Client
+	meta       page.MetaData
+	users      []ActivityUser
+	actorCache *ccache.Cache[activity.Actor]
 }
 
 type ActivityUser struct {
@@ -118,19 +123,116 @@ func (s *ActivityService) ListenAndServe(ctx context.Context) error {
 	}
 }
 
-// NewService creates an http service to listen for ActivityPub requests
-func NewService(cfg Config) ActivityService {
-	svc := ActivityService{
-		Pipeline: NewPipeline(),
-		Config:   cfg,
-		router:   mux.NewRouter(),
-		users:    make([]ActivityUser, 0),
+func (s *ActivityService) ActivityRequest(method string, url string, v any) (*http.Request, error) {
+	var reader io.Reader
+	if v != nil {
+		body, err := json.Marshal(v)
+		if err != nil {
+			return nil, fmt.Errorf("marshaling json from object: %w", err)
+		}
+		reader = bytes.NewBuffer(body)
 	}
+	r, err := http.NewRequest(method, url, reader)
+	if err != nil {
+		return nil, fmt.Errorf("creating ActivityPub request: %w", err)
+	}
+	r.Header.Set("User-Agent", "Activitylace/0.1 (+https://github.com/tkrehbiel/activitylace)")
+	r.Header.Set("Content-Type", activity.ContentType)
+	r.Header.Set("Host", s.Config.Server.HostName)
+	r.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
+	return r, nil
+}
+
+// GetActor finds the remote endpoint for the actor ID, which is assumed to be a URL.
+// Blocks until we get a response or the context is cancelled or times out.
+func (s *ActivityService) GetActor(id string) (*activity.Actor, error) {
+	item := s.actorCache.Get(id)
+	if item != nil && !item.Expired() {
+		telemetry.Trace("found actor %s in cache", id)
+		cached := item.Value()
+		return &cached, nil
+	}
+
+	// TODO: maybe support webfingering an acct:x@y resource too
+	// TODO: make this more asynchronous, and (optionally?) cache the results locally
+	// TODO: retry periodically?
+
+	r, err := s.ActivityRequest("GET", id, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := s.client.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	var actor activity.Actor
+	decoder := json.NewDecoder(resp.Body)
+	if err := decoder.Decode(&actor); err != nil {
+		telemetry.Error(err, "decoding json body")
+		return nil, err
+	}
+
+	s.actorCache.Set(id, actor, 10*time.Minute)
+
+	return &actor, nil
+}
+
+func (s *ActivityService) GetActorPublicKey(id string) crypto.PublicKey {
+	// TODO: Cache this result!
+	url, err := url.Parse(id)
+	if err != nil {
+		telemetry.Error(err, "parsing public key ID [%s]", id)
+		return nil
+	}
+	url.Fragment = "" // remove the fragment
+
+	actor, err := s.GetActor(url.String())
+	if err != nil {
+		telemetry.Error(err, "fetching remote actor")
+		return nil
+	}
+
+	if actor.ID != url.String() {
+		telemetry.Error(err, "remote actor ID [%s] doesn't match [%s]", actor.ID, url.String())
+		return nil
+	}
+	if actor.PublicKey.ID != id {
+		telemetry.Error(err, "remote public key ID [%s] doesn't match [%s]", actor.PublicKey.ID, id)
+		return nil
+	}
+	pubKeyPem := actor.PublicKey.Key
+	der, _ := pem.Decode([]byte(pubKeyPem))
+	if der == nil {
+		telemetry.Error(nil, "can't decode pem [%s]", pubKeyPem)
+		return nil
+	}
+	pubKey, err := x509.ParsePKIXPublicKey(der.Bytes)
+	if err != nil {
+		telemetry.Error(err, "parsing public key [%s]", pubKeyPem)
+		return nil
+	}
+	return pubKey
+}
+
+// NewService creates an http service to listen for ActivityPub requests
+func NewService(cfg Config) *ActivityService {
+	svc := ActivityService{
+		client: http.Client{
+			Timeout: time.Second * 15,
+		},
+		Config:     cfg,
+		router:     mux.NewRouter(),
+		users:      make([]ActivityUser, 0),
+		actorCache: ccache.New(ccache.Configure[activity.Actor]()),
+	}
+
+	svc.Pipeline = NewPipeline()
+	svc.Pipeline.client = svc.client
 
 	u, err := url.Parse(cfg.URL)
 	if err != nil {
 		telemetry.Error(err, "parsing url [%s]", cfg.URL)
-		return svc
+		return &svc
 	}
 
 	svc.Pipeline.host = u.Host
@@ -204,20 +306,27 @@ func NewService(cfg Config) ActivityService {
 		}
 
 		serverUser.outbox = ActivityOutbox{
-			id:       path.Join(svc.meta.URL, fmt.Sprintf("%s/%s/outbox", page.SubPath, usercfg.Name)),
-			username: usercfg.Name,
-			rssURL:   usercfg.SourceURL,
-			notes:    store.(storage.Notes),
+			service:        &svc,
+			id:             path.Join(svc.meta.URL, fmt.Sprintf("%s/%s/outbox", page.SubPath, usercfg.Name)),
+			ownerID:        usercfg.Name,
+			rssURL:         usercfg.SourceURL,
+			notes:          store.(storage.Notes),
+			followers:      store.(storage.Followers),
+			pipeline:       svc.Pipeline,
+			privKey:        serverUser.privKey,
+			pubKeyID:       umeta.UserPublicKeyID,
+			acceptUnsigned: cfg.Server.ReceiveUnsigned,
+			sendUnsigned:   cfg.Server.SendUnsigned,
 		}
 
 		serverUser.inbox = ActivityInbox{
+			service:        &svc,
 			id:             path.Join(svc.meta.URL, fmt.Sprintf("%s/%s/inbox", page.SubPath, usercfg.Name)),
 			ownerID:        serverUser.meta.UserID,
 			followers:      store.(storage.Followers),
 			pipeline:       svc.Pipeline,
 			privKey:        serverUser.privKey,
 			pubKeyID:       umeta.UserPublicKeyID,
-			actorCache:     ccache.New(ccache.Configure[activity.Actor]()),
 			acceptUnsigned: cfg.Server.ReceiveUnsigned,
 			sendUnsigned:   cfg.Server.SendUnsigned,
 		}
@@ -246,7 +355,7 @@ func NewService(cfg Config) ActivityService {
 	}
 
 	telemetry.Trace("service initialized")
-	return svc
+	return &svc
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {

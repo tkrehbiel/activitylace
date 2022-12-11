@@ -3,18 +3,13 @@ package server
 import (
 	"bytes"
 	"crypto"
-	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/karlseguin/ccache/v3"
 	"github.com/tkrehbiel/activitylace/server/activity"
 	"github.com/tkrehbiel/activitylace/server/storage"
 	"github.com/tkrehbiel/activitylace/server/telemetry"
@@ -23,13 +18,13 @@ import (
 // TODO: This file is way too big
 
 type ActivityInbox struct {
+	service        *ActivityService
 	id             string
 	ownerID        string // id of the owner of the inbox
 	followers      storage.Followers
 	pipeline       *OutputPipeline
 	privKey        crypto.PrivateKey
 	pubKeyID       string
-	actorCache     *ccache.Cache[activity.Actor]
 	acceptUnsigned bool
 	sendUnsigned   bool
 }
@@ -64,7 +59,7 @@ func (ai *ActivityInbox) PostHTTP(w http.ResponseWriter, r *http.Request) {
 	telemetry.Increment("post_requests", 1)
 
 	if !ai.acceptUnsigned {
-		if err := verify(ai, r); err != nil {
+		if err := verify(ai.service, r); err != nil {
 			telemetry.Error(err, "signature unverified for %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -182,7 +177,6 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 	telemetry.Trace("queuing an accept response")
 	ai.pipeline.Queue(&FollowResponse{
 		inbox:        ai,
-		followers:    ai.followers,
 		follow:       follow,
 		followID:     act.ID,
 		remoteID:     actorID,
@@ -196,7 +190,6 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 
 type FollowResponse struct {
 	inbox        *ActivityInbox
-	followers    storage.Followers
 	follow       storage.Follow
 	followID     string
 	localID      string
@@ -211,7 +204,7 @@ func (f *FollowResponse) String() string {
 func (f *FollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error) {
 	// Lookup the follower's inbox
 	telemetry.Increment("actor_fetches", 1)
-	remote, err := f.inbox.GetActor(f.remoteID)
+	remote, err := f.inbox.service.GetActor(f.remoteID)
 	if err != nil {
 		return nil, fmt.Errorf("looking up remote actor: %w", err)
 	}
@@ -246,7 +239,7 @@ func (f *FollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error
 		},
 	}
 
-	r, err := pipeline.ActivityRequest(http.MethodPost, remote.Inbox, &acceptObject)
+	r, err := f.inbox.service.ActivityRequest(http.MethodPost, remote.Inbox, &acceptObject)
 	if err != nil {
 		return nil, fmt.Errorf("creating accept request: %w", err)
 	}
@@ -264,7 +257,7 @@ func (f *FollowResponse) Receive(resp *http.Response) {
 		telemetry.Increment("accept_responses", 1)
 		// mark transaction was completed successfully
 		f.follow.RequestStatus = "accepted"
-		if err := f.followers.SaveFollow(f.follow); err != nil {
+		if err := f.inbox.followers.SaveFollow(f.follow); err != nil {
 			// Bad time for a database error. This will leave the follow request
 			// marked as "pending" in our local database, but the remote server
 			// will believe the transaction was successful and they are following.
@@ -342,7 +335,7 @@ func (f *UnfollowResponse) String() string {
 func (f *UnfollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error) {
 	// Lookup the follower's inbox
 	telemetry.Increment("actor_fetches", 1)
-	remote, err := f.inbox.GetActor(f.remoteID)
+	remote, err := f.inbox.service.GetActor(f.remoteID)
 	if err != nil {
 		return nil, fmt.Errorf("looking up remote actor: %w", err)
 	}
@@ -390,7 +383,7 @@ func (f *UnfollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, err
 		},
 	}
 
-	r, err := pipeline.ActivityRequest(http.MethodPost, remote.Inbox, &acceptObject)
+	r, err := f.inbox.service.ActivityRequest(http.MethodPost, remote.Inbox, &acceptObject)
 	if err != nil {
 		return nil, fmt.Errorf("creating accept request: %w", err)
 	}
@@ -449,75 +442,4 @@ func jsonBytes(v any) []byte {
 
 func jsonReader(v any) io.Reader {
 	return bytes.NewBuffer(jsonBytes(v))
-}
-
-// GetActor finds the remote endpoint for the actor ID, which is assumed to be a URL.
-// Blocks until we get a response or the context is cancelled or times out.
-func (ai *ActivityInbox) GetActor(id string) (*activity.Actor, error) {
-	item := ai.actorCache.Get(id)
-	if item != nil && !item.Expired() {
-		telemetry.Trace("found actor %s in cache", id)
-		cached := item.Value()
-		return &cached, nil
-	}
-
-	// TODO: maybe support webfingering an acct:x@y resource too
-	// TODO: make this more asynchronous, and (optionally?) cache the results locally
-	// TODO: retry periodically?
-
-	r, err := ai.pipeline.ActivityRequest("GET", id, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := ai.pipeline.client.Do(r)
-	if err != nil {
-		return nil, err
-	}
-	var actor activity.Actor
-	decoder := json.NewDecoder(resp.Body)
-	if err := decoder.Decode(&actor); err != nil {
-		telemetry.Error(err, "decoding json body")
-		return nil, err
-	}
-
-	ai.actorCache.Set(id, actor, 10*time.Minute)
-
-	return &actor, nil
-}
-
-func (ai *ActivityInbox) GetActorPublicKey(id string) crypto.PublicKey {
-	// TODO: Cache this result!
-	url, err := url.Parse(id)
-	if err != nil {
-		telemetry.Error(err, "parsing public key ID [%s]", id)
-		return nil
-	}
-	url.Fragment = "" // remove the fragment
-
-	actor, err := ai.GetActor(url.String())
-	if err != nil {
-		telemetry.Error(err, "fetching remote actor")
-		return nil
-	}
-
-	if actor.ID != url.String() {
-		telemetry.Error(err, "remote actor ID [%s] doesn't match [%s]", actor.ID, url.String())
-		return nil
-	}
-	if actor.PublicKey.ID != id {
-		telemetry.Error(err, "remote public key ID [%s] doesn't match [%s]", actor.PublicKey.ID, id)
-		return nil
-	}
-	pubKeyPem := actor.PublicKey.Key
-	der, _ := pem.Decode([]byte(pubKeyPem))
-	if der == nil {
-		telemetry.Error(nil, "can't decode pem [%s]", pubKeyPem)
-		return nil
-	}
-	pubKey, err := x509.ParsePKIXPublicKey(der.Bytes)
-	if err != nil {
-		telemetry.Error(err, "parsing public key [%s]", pubKeyPem)
-		return nil
-	}
-	return pubKey
 }

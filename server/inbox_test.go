@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -42,6 +43,10 @@ type mockDatabase struct {
 	mock.Mock
 }
 
+func (m *mockDatabase) GetFollowers() ([]storage.Follow, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 func (m *mockDatabase) FindFollow(id string) (*storage.Follow, error) {
 	args := m.Called(id)
 	if f, ok := args.Get(0).(*storage.Follow); ok {
@@ -70,16 +75,19 @@ func TestInbox_Follow(t *testing.T) {
 	const followID = "follow_request_id"
 	var remoteID string
 
-	inbox := ActivityInbox{
-		id:         "test",
-		ownerID:    id,
-		pipeline:   pipeline,
+	svc := ActivityService{
 		actorCache: ccache.New(ccache.Configure[activity.Actor]()),
+	}
+
+	inbox := ActivityInbox{
+		service:  &svc,
+		id:       "test",
+		ownerID:  id,
+		pipeline: pipeline,
 	}
 
 	// Simulate the remote inbox
 	remoteInbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Contains(t, r.Header.Get("Accept"), "json")
 		w.WriteHeader(http.StatusOK)
 		var act activity.Activity
 		decoder := json.NewDecoder(r.Body)
@@ -92,7 +100,6 @@ func TestInbox_Follow(t *testing.T) {
 
 	// Simulate the remote actor URL
 	remoteActor := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Contains(t, r.Header.Get("Accept"), "json")
 		actor := activity.Actor{
 			Context: activity.Context,
 			Type:    activity.PersonType,
@@ -158,16 +165,19 @@ func TestInbox_UnFollow(t *testing.T) {
 	const undoID = "undo_request_id"
 	var remoteID string
 
-	inbox := ActivityInbox{
-		id:         "test",
-		ownerID:    id,
-		pipeline:   pipeline,
+	svc := ActivityService{
 		actorCache: ccache.New(ccache.Configure[activity.Actor]()),
+	}
+
+	inbox := ActivityInbox{
+		service:  &svc,
+		id:       "test",
+		ownerID:  id,
+		pipeline: pipeline,
 	}
 
 	// Simulate the remote inbox
 	remoteInbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Contains(t, r.Header.Get("Accept"), "json")
 		w.WriteHeader(http.StatusOK)
 		var act activity.Activity
 		decoder := json.NewDecoder(r.Body)
@@ -179,7 +189,6 @@ func TestInbox_UnFollow(t *testing.T) {
 
 	// Simulate the remote actor URL
 	remoteActor := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Contains(t, r.Header.Get("Accept"), "json")
 		actor := activity.Actor{
 			Context: activity.Context,
 			Type:    activity.PersonType,

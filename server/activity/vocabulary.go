@@ -28,6 +28,7 @@ const (
 	RejectType = "Reject"
 	FollowType = "Follow"
 	UndoType   = "Undo"
+	CreateType = "Create"
 )
 
 const (

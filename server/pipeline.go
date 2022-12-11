@@ -1,16 +1,12 @@
 package server
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"sync"
 	"time"
 
-	"github.com/tkrehbiel/activitylace/server/activity"
 	"github.com/tkrehbiel/activitylace/server/telemetry"
 )
 
@@ -59,6 +55,7 @@ func (p *OutputPipeline) SendAndWait(r *http.Request, accept func(resp *http.Res
 // Expected to be run in a goroutine.
 func (p *OutputPipeline) Run(ctx context.Context) error {
 	telemetry.Trace("running output pipeline")
+	// TODO: add rate limiting
 	// Wait for context end or messages from the pipeline channel
 	for {
 		select {
@@ -98,26 +95,4 @@ func NewPipeline() *OutputPipeline {
 		},
 		pipeline: make(chan QueueHandler),
 	}
-}
-
-func (s *OutputPipeline) ActivityRequest(method string, url string, v any) (*http.Request, error) {
-	// TODO: Make this a global function that doesn't require a pipeline
-	var reader io.Reader
-	if v != nil {
-		body, err := json.Marshal(v)
-		if err != nil {
-			return nil, fmt.Errorf("marshaling json from object: %w", err)
-		}
-		reader = bytes.NewBuffer(body)
-	}
-	r, err := http.NewRequest(method, url, reader)
-	if err != nil {
-		return nil, fmt.Errorf("creating ActivityPub request: %w", err)
-	}
-	r.Header.Set("User-Agent", "Activitylace/0.1 (+https://github.com/tkrehbiel/activitylace)")
-	r.Header.Set("Content-Type", activity.ContentType)
-	r.Header.Set("Accept", activity.ContentType)
-	r.Header.Set("Host", s.host)
-	r.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
-	return r, nil
 }

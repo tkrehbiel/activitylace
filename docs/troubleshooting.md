@@ -79,7 +79,7 @@ It's not a typo because it then goes on to say: "This request is functionally eq
 
 I think it's just a misunderstanding of how it works, because the code uses `keypair.sign` and surely the makers of Ruby know to sign with the private key instead of the public key.
 
-I tried to use `rsa.SignPKCS1v15` instead of `privKey.Sign` and it fared no better or worse.
+I tried to use `rsa.SignPKCS1v15` instead of `privKey.Sign` and it fared no better or worse. I'm utterly baffled by Mastodon's refusal to accept these signatures. The only thing I can think of is it's reporting the wrong error to me. Maybe try an `hs2019` algorithm with SHA512???? (Which is technically more secure but I doubt anyone else in the fediverse will support it since everything including Mastodon seems to be hard-coded for rsa-sha256.)
 
 ## Mastodon and `@context https://w3id.org/security/v1`
 
@@ -115,7 +115,7 @@ Pixelfed: `Signature: keyId="individual user#main-key",headers="(request-target)
 
 Friendica: `Signature: keyId="server instance#main-key",algorithm="rsa-sha256",headers="(request-target) date host",signature="..."`
 
-Pixelfed and Friendica both succeed without an http signature.
+Pixelfed does not seem to require a signature for an Accept activity, although I see signature verification code [in the codebase](https://github.com/pixelfed/pixelfed) (PHP, shudder). Friendica also doesn't seem to require a signature for an Accept activity.
 
 For comparison (these don't yet work):
 

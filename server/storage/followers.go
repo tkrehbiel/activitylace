@@ -9,9 +9,21 @@ type Follow struct {
 }
 
 type Followers interface {
+	GetFollowers() ([]Follow, error)
 	FindFollow(id string) (*Follow, error)
 	DeleteFollow(id string) error
 	SaveFollow(f Follow) error
+}
+
+func (s *sqliteDatabase) GetFollowers() ([]Follow, error) {
+	var followers []Follow
+	tx := s.db.Find(&followers)
+	if tx.Error == gorm.ErrRecordNotFound {
+		return nil, nil
+	} else if tx.Error != nil {
+		return nil, tx.Error
+	}
+	return followers, nil
 }
 
 func (s *sqliteDatabase) FindFollow(id string) (*Follow, error) {
