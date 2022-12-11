@@ -68,9 +68,11 @@ func (ai *ActivityInbox) PostHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if !ai.acceptUnsigned {
 		if err := verify(ai, r); err != nil {
-			telemetry.Error(err, "verifying signature")
+			telemetry.Error(err, "signature unverified for %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusUnauthorized)
 			return
+		} else {
+			telemetry.Trace("signature verified for %s %s", r.Method, r.URL.Path)
 		}
 	}
 

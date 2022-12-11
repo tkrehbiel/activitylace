@@ -218,7 +218,7 @@ func NewService(cfg Config) ActivityService {
 			privKey:        serverUser.privKey,
 			pubKeyID:       umeta.UserPublicKeyID,
 			actorCache:     ccache.New(ccache.Configure[activity.Actor]()),
-			acceptUnsigned: cfg.Server.AcceptAll,
+			acceptUnsigned: false,
 		}
 
 		if err := serverUser.store.Open(); err != nil {
