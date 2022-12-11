@@ -73,6 +73,12 @@ I'm using `github.com/go-fed/httpsig` to create and verify signatures. It succes
 
 This contains links that may help: https://www.drupal.org/project/activitypub/issues/3179629
 
+12/11/2022 Still no luck. [Mastodon inexplicably says](https://docs.joinmastodon.org/spec/security/) "The signature string is then hashed with SHA256 and signed with the actor’s _public_ [sic] key." Signing with a public key makes no sense, because, you know, it's public.
+
+It's not a typo because it then goes on to say: "This request is functionally equivalent to saying that https://my-example.com/actor is requesting https://mastodon.example/users/username/inbox and is proving that they sent this request by signing (request-target), Host:, and Date: _with their public key_ [sic] linked at keyId, resulting in the provided signature."
+
+I think it's just a misunderstanding of how it works, because the code uses `keypair.sign` and surely the makers of Ruby know to sign with the private key instead of the public key.
+
 ## Mastodon and `@context https://w3id.org/security/v1`
 
 Mastodon [gives the example](https://blog.joinmastodon.org/2018/06/how-to-implement-a-basic-activitypub-server/) of endpoints including the https://w3id.org/security/v1 context which I think is intended to define the `publicKey` extension, but [the actual spec](https://w3c.github.io/vc-data-integrity/vocab/security/vocabulary.html) does not define a publicKey block like Mastodon uses. The spec defines the `publicKey` as a URL to a key, not a block of metadata. So I'm not sure it makes sense to include https://w3id.org/security/v1 in the @context. Then again, it's almost impossible to figure out JSON-LD schemas.

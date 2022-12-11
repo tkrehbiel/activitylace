@@ -66,30 +66,32 @@ func Error(err error, format string, args ...any) {
 
 // Request logs essential information about an HTTP request
 func Request(r *http.Request, format string, args ...any) {
-	headers := make([]string, 0)
+	lines := make([]string, 0)
+	lines = append(lines, fmt.Sprintf("%s %s", r.Method, r.URL.String()))
 	for k, v := range r.Header {
 		s := fmt.Sprintf("%s: %s", k, strings.Join(v, ", "))
-		headers = append(headers, s)
+		lines = append(lines, s)
 	}
-	s := strings.Join(headers, " | ")
+	hdr := strings.Join(lines, "\n")
 
+	var body string
 	if r.Body != nil {
 		buf, err := ioutil.ReadAll(r.Body)
 		defer r.Body.Close()
 		if err != nil {
-			s += ", error reading body"
+			body = "(error reading body)"
 		} else if len(buf) > 0 {
-			s += fmt.Sprintf(", body:%s", string(buf))
+			body = string(buf)
 		} else {
-			s += ", no body"
+			body = "(no body)"
 		}
 		reader := ioutil.NopCloser(bytes.NewBuffer(buf))
 		r.Body = reader
 	} else {
-		s += ", no body"
+		body = "(no body)"
 	}
 
-	Trace("request %s: %s %s, headers: %s", fmt.Sprintf(format, args...), r.Method, r.URL, s)
+	Trace("request %s: %s\n%s", fmt.Sprintf(format, args...), hdr, body)
 }
 
 // Response logs essential information about an HTTP response

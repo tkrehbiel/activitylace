@@ -20,7 +20,7 @@ import (
 func computeDigest(body []byte) string {
 	hash := sha256.New()
 	hash.Write(body)
-	return base64.StdEncoding.EncodeToString(hash.Sum(nil))
+	return base64.RawStdEncoding.EncodeToString(hash.Sum(nil))
 }
 
 func computeSigningString(signedHeaders []string, r *http.Request) string {
@@ -74,7 +74,7 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 	if err != nil {
 		return err
 	}
-	signature64 := base64.StdEncoding.EncodeToString(signature)
+	signature64 := base64.RawStdEncoding.EncodeToString(signature)
 	r.Header.Add("Signature", fmt.Sprintf(`keyId="%s",algorithm="rsa-sha256",created=%d,expires=%d,headers="%s",signature="%s"`,
 		pubKeyId, created.Unix(), expires.Unix(), strings.Join(signedHeaders, " "), signature64))
 	return nil
