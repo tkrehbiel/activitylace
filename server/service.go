@@ -136,10 +136,11 @@ func (s *ActivityService) ActivityRequest(method string, url string, v any) (*ht
 	if err != nil {
 		return nil, fmt.Errorf("creating ActivityPub request: %w", err)
 	}
-	r.Header.Set("User-Agent", "Activitylace/0.1 (+https://github.com/tkrehbiel/activitylace)")
-	r.Header.Set("Content-Type", activity.ContentType)
-	r.Header.Set("Host", s.Config.Server.HostName)
-	r.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
+	r.Header.Add("User-Agent", "Activitylace/0.1 (+https://github.com/tkrehbiel/activitylace)")
+	r.Header.Add("Accept", activity.ContentType)
+	r.Header.Add("Content-Type", activity.ContentType)
+	r.Header.Add("Host", s.Config.Server.HostName)
+	r.Header.Add("Date", time.Now().UTC().Format(http.TimeFormat))
 	return r, nil
 }
 
