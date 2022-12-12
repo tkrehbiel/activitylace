@@ -51,15 +51,14 @@ func (ao *ActivityOutbox) SendToFollowers(obj storage.Note) {
 		telemetry.Error(err, "getting followers")
 		return
 	}
+	telemetry.Trace("sending to %d followers", len(users))
 	for _, follower := range users {
 		ao.SendToFollower(obj, follower)
 	}
 }
 
 func (ao *ActivityOutbox) SendToFollower(obj storage.Note, follower storage.Follow) {
-	// Queue an Accept response.
-	// We have to do that outside this function or else race conditions.
-	telemetry.Trace("queuing an accept response")
+	telemetry.Trace("queuing a note activity")
 	ao.pipeline.Queue(&NoteActivity{
 		service:  ao.service,
 		outbox:   ao,
