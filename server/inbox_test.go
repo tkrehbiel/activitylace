@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/karlseguin/ccache/v3"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tkrehbiel/activitylace/server/activity"
 	"github.com/tkrehbiel/activitylace/server/storage"
@@ -37,32 +35,6 @@ func TestGetKey_String(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(testJSON), &act))
 	assert.Equal(t, "sally", parseID(act.Actor))
 	assert.Equal(t, "john", parseID(act.Object))
-}
-
-type mockDatabase struct {
-	mock.Mock
-}
-
-func (m *mockDatabase) GetFollowers() ([]storage.Follow, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
-func (m *mockDatabase) FindFollow(id string) (*storage.Follow, error) {
-	args := m.Called(id)
-	if f, ok := args.Get(0).(*storage.Follow); ok {
-		return f, args.Error(1)
-	}
-	return nil, args.Error(1)
-}
-
-func (m *mockDatabase) DeleteFollow(id string) error {
-	args := m.Called(id)
-	return args.Error(0)
-}
-
-func (m *mockDatabase) SaveFollow(f storage.Follow) error {
-	args := m.Called(f)
-	return args.Error(0)
 }
 
 // A complex integration test of the happy path for Follow and Accept logic
@@ -113,7 +85,7 @@ func TestInbox_Follow(t *testing.T) {
 
 	remoteID = remoteActor.URL
 
-	database := &mockDatabase{}
+	database := &mockFollowers{}
 	database.On("FindFollow", remoteID).Return(nil, nil).Once()
 	database.On("SaveFollow", storage.Follow{
 		ID:            remoteID,
@@ -202,7 +174,7 @@ func TestInbox_UnFollow(t *testing.T) {
 
 	remoteID = remoteActor.URL
 
-	database := &mockDatabase{}
+	database := &mockFollowers{}
 	database.On("DeleteFollow", remoteID).Return(nil, nil).Once()
 	inbox.followers = database
 

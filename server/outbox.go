@@ -109,6 +109,7 @@ func (f *NoteActivity) Prepare(pipeline *OutputPipeline) (*http.Request, error) 
 			Type:      activity.NoteType,
 			ID:        f.note.ID,
 			Content:   f.note.Content,
+			MediaType: "text/plain",
 			Published: f.note.Published.Format(activity.TimeFormat),
 		},
 	}
