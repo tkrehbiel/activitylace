@@ -86,6 +86,7 @@ func TestInbox_Follow(t *testing.T) {
 	remoteID = remoteActor.URL
 
 	database := &mockFollowers{}
+	database.On("GetFollowers").Return(nil, nil).Once()
 	database.On("FindFollow", remoteID).Return(nil, nil).Once()
 	database.On("SaveFollow", storage.Follow{
 		ID:            remoteID,

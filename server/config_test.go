@@ -14,11 +14,20 @@ func TestReadConfig(t *testing.T) {
 		  "host": "testhost",
 		  "certificate": "testcert",
 		  "privatekey": "testkey",
-		  "port": 234
+		  "port": 234,
+		  "accept_all": true,
+		  "send_unsigned": true,
+		  "receive_unsigned": true,
+		  "max_followers": 100
 		},
 		"users": [
 		  {
-			"name": "testuser"
+			"name": "testuser",
+			"type": "testtype",
+			"displayName": "testdisplayname",
+			"outboxSource": "testurl",
+			"pubKey": "testpub",
+			"privKey": "testprivate"
 		  }
 		]
 	  }`)
@@ -27,14 +36,23 @@ func TestReadConfig(t *testing.T) {
 
 	expected := Config{
 		Server: serverConfig{
-			HostName:    "testhost",
-			Certificate: "testcert",
-			PrivateKey:  "testkey",
-			Port:        234,
+			HostName:        "testhost",
+			Certificate:     "testcert",
+			PrivateKey:      "testkey",
+			Port:            234,
+			AcceptAll:       true,
+			SendUnsigned:    true,
+			ReceiveUnsigned: true,
+			MaxFollowers:    100,
 		},
 		Users: []userConfig{
 			{
-				Name: "testuser",
+				Name:        "testuser",
+				Type:        "testtype",
+				DisplayName: "testdisplayname",
+				SourceURL:   "testurl",
+				PubKeyFile:  "testpub",
+				PrivKeyFile: "testprivate",
 			},
 		},
 	}

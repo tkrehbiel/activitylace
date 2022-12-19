@@ -160,16 +160,29 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 		// Falls through and attempts to send an accept anyway (though it may have already been sent)
 	}
 
-	// Save the new follower. We mark it as "pending" until we successfully
-	// send an Accept request back to the remote server.
-	follow := storage.Follow{
-		ID:            actorID,
-		RequestID:     act.ID,
-		RequestStatus: "pending",
-	}
-	if err := ai.followers.SaveFollow(follow); err != nil {
-		message += " - database write error"
+	responseType := activity.AcceptType
+
+	var follow storage.Follow
+	followers, err := ai.followers.GetFollowers()
+	if err != nil {
+		message += " - rejected, database read error"
 		telemetry.Error(err, "database error")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	if ai.service.Config.Server.MaxFollowers == 0 || len(followers) < ai.service.Config.Server.MaxFollowers {
+		// Save the new follower. We mark it as "pending" until we successfully
+		// send an Accept request back to the remote server.
+		// We only accept it if it doesn't exceed the maximum followers.
+		follow = storage.Follow{
+			ID:            actorID,
+			RequestID:     act.ID,
+			RequestStatus: "pending",
+		}
+		if err := ai.followers.SaveFollow(follow); err != nil {
+			message += " - database write error"
+			telemetry.Error(err, "database error")
+		}
 	}
 
 	// Queue an Accept response.
@@ -181,7 +194,7 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 		followID:     act.ID,
 		remoteID:     actorID,
 		localID:      ai.ownerID,
-		responseType: activity.AcceptType,
+		responseType: responseType,
 	})
 
 	message += " - success"
@@ -255,13 +268,15 @@ func (f *FollowResponse) Receive(resp *http.Response) {
 	telemetry.Trace("received response from accept %d", resp.StatusCode)
 	if resp.StatusCode == http.StatusOK {
 		telemetry.Increment("accept_responses", 1)
-		// mark transaction was completed successfully
-		f.follow.RequestStatus = "accepted"
-		if err := f.inbox.followers.SaveFollow(f.follow); err != nil {
-			// Bad time for a database error. This will leave the follow request
-			// marked as "pending" in our local database, but the remote server
-			// will believe the transaction was successful and they are following.
-			telemetry.Error(err, "database error")
+		if f.responseType == activity.AcceptType {
+			// mark transaction was completed successfully
+			f.follow.RequestStatus = "accepted"
+			if err := f.inbox.followers.SaveFollow(f.follow); err != nil {
+				// Bad time for a database error. This will leave the follow request
+				// marked as "pending" in our local database, but the remote server
+				// will believe the transaction was successful and they are following.
+				telemetry.Error(err, "database error")
+			}
 		}
 	}
 }

@@ -122,3 +122,7 @@ For comparison (these don't yet work):
 Pleroma: `Signature: keyId="server instance#main-key",algorithm="rsa-sha256",headers="(request-target) date host",signature="..."`
 
 Mastodon: `Signature: keyId="individual user#main-key",algorithm="rsa-sha256",headers="(request-target) host date digest content-type",signature="..."`
+
+## Pixelfed and Friendica don't display any notes
+
+12/12/2022 Both Pixelfed and Friendica seem to successfully Follow the server, and accept Create Note activities sent to their inbox, but I don't see them displayed anywhere.

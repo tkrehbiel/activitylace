@@ -12,6 +12,7 @@ type serverConfig struct {
 	AcceptAll       bool   `json:"accept_all"` // for debugging
 	SendUnsigned    bool   `json:"send_unsigned"`
 	ReceiveUnsigned bool   `json:"receive_unsigned"`
+	MaxFollowers    int    `json:"max_followers"`
 }
 
 func (s serverConfig) useTLS() bool {
