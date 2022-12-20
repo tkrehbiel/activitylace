@@ -160,7 +160,7 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 		// Falls through and attempts to send an accept anyway (though it may have already been sent)
 	}
 
-	responseType := activity.AcceptType
+	responseType := activity.RejectType
 
 	var follow storage.Follow
 	followers, err := ai.followers.GetFollowers()
@@ -183,9 +183,10 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 			message += " - database write error"
 			telemetry.Error(err, "database error")
 		}
+		responseType = activity.AcceptType
 	}
 
-	// Queue an Accept response.
+	// Queue a response.
 	// We have to do that outside this function or else race conditions.
 	telemetry.Trace("queuing an accept response")
 	ai.pipeline.Queue(&FollowResponse{

@@ -37,8 +37,8 @@ func TestGetKey_String(t *testing.T) {
 	assert.Equal(t, "john", parseID(act.Object))
 }
 
-// A complex integration test of the happy path for Follow and Accept logic
 func TestInbox_Follow(t *testing.T) {
+	// A complex integration test of the happy path for Follow and Accept logic
 	pipeline := NewPipeline()
 	go pipeline.Run(context.Background())
 	defer pipeline.Stop()
@@ -65,8 +65,9 @@ func TestInbox_Follow(t *testing.T) {
 		decoder := json.NewDecoder(r.Body)
 		err := decoder.Decode(&act)
 		assert.NoError(t, err)
+		assert.Equal(t, activity.AcceptType, act.Type)
 		assert.Equal(t, followID, parseID(act.Object)) // id of follow request
-		assert.Equal(t, id, parseID(act.Actor))        // if of recipient of follow request
+		assert.Equal(t, id, parseID(act.Actor))        // id of recipient of follow request
 	}))
 	defer remoteInbox.Close()
 
@@ -128,8 +129,107 @@ func TestInbox_Follow(t *testing.T) {
 	database.AssertExpectations(t)
 }
 
-// A complex integration test of the happy path for Undo Follow logic
+func TestInbox_Follow_MaxFollowers(t *testing.T) {
+	// Test that exceeding MaxFollowers sends a Reject activity
+	pipeline := NewPipeline()
+	go pipeline.Run(context.Background())
+	defer pipeline.Stop()
+
+	const id = "followed_id"
+	const followID = "follow_request_id"
+	var remoteID string
+
+	svc := ActivityService{
+		Config: Config{
+			Server: serverConfig{
+				MaxFollowers: 2,
+			},
+		},
+		actorCache: ccache.New(ccache.Configure[activity.Actor]()),
+	}
+
+	inbox := ActivityInbox{
+		service:  &svc,
+		id:       "test",
+		ownerID:  id,
+		pipeline: pipeline,
+	}
+
+	// Simulate the remote inbox
+	remoteInbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		var act activity.Activity
+		decoder := json.NewDecoder(r.Body)
+		err := decoder.Decode(&act)
+		assert.NoError(t, err)
+		assert.Equal(t, activity.RejectType, act.Type)
+		assert.Equal(t, followID, parseID(act.Object)) // id of follow request
+		assert.Equal(t, id, parseID(act.Actor))        // id of recipient of follow request
+	}))
+	defer remoteInbox.Close()
+
+	// Simulate the remote actor URL
+	remoteActor := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		actor := activity.Actor{
+			Context: activity.Context,
+			Type:    activity.PersonType,
+			ID:      remoteID,
+			Inbox:   remoteInbox.URL,
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write(jsonBytes(&actor))
+	}))
+	defer remoteActor.Close()
+
+	remoteID = remoteActor.URL
+
+	database := &mockFollowers{}
+	database.On("GetFollowers").Return([]storage.Follow{
+		// 2 followers already
+		{
+			ID:            "id1",
+			RequestID:     "requestid1",
+			RequestStatus: "allowed",
+		},
+		{
+			ID:            "id2",
+			RequestID:     "requestid2",
+			RequestStatus: "allowed",
+		},
+	}, nil).Once()
+	database.On("FindFollow", remoteID).Return(nil, nil).Once()
+	inbox.followers = database
+
+	recorder := httptest.NewRecorder()
+	follow := activity.Activity{
+		Context: activity.Context,
+		Type:    activity.FollowType,
+		ID:      followID,
+		Actor:   remoteID,
+		Object:  id,
+	}
+
+	// wrap in a timeout to avoid potential deadlock
+	timeout := time.After(3 * time.Second)
+	done := make(chan bool)
+	go func() {
+		inbox.Follow(recorder, follow)
+		done <- true
+	}()
+	select {
+	case <-timeout:
+		t.Fatal("Test didn't finish")
+	case <-done:
+		break
+	}
+
+	pipeline.Flush() // wait for queued requests to finish
+
+	database.AssertExpectations(t)
+}
+
 func TestInbox_UnFollow(t *testing.T) {
+	// A complex integration test of the happy path for Undo Follow logic
 	pipeline := NewPipeline()
 	go pipeline.Run(context.Background())
 	defer pipeline.Stop()

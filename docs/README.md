@@ -35,7 +35,7 @@ If this doesn't run on the same server, the blog server will have to redirect we
 - ~~May require POST requests to be signed in some way to avoid spam. Need to investigate how that works. (I don't think there's a standard for this in ActivityPub.)~~ (Mastodon complains about our signatures, I don't yet know why.)
 - Follows from blocked actors will be discarded.
 - Follows from blocked servers will be discarded.
-- To protect against the unlikely scenario of a million followers appearing out of nowhere, impose a limit on the number of followers for now. Say, 1000.
+- ~~To protect against the unlikely scenario of a million followers appearing out of nowhere, impose a limit on the number of followers for now. Say, 1000.~~
 
 ## Phase 3, Replies
 - The blog actor's Inbox will receive activity Notes (replies) and treat them as blog comments. Some way to filter out private replies might be needed. Not sure how that works yet. I think ActivityPub notes are tagged as being copied to "public"?
