@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -306,7 +307,7 @@ func NewService(cfg Config) *ActivityService {
 				telemetry.Error(err, "reading public key file [%s]", usercfg.PubKeyFile)
 				continue
 			}
-			umeta.UserPublicKey = string(b)
+			umeta.UserPublicKey = strings.ReplaceAll(string(b), "\r\n", `\n`)
 		}
 
 		dbName := fmt.Sprintf("user_%s.db", usercfg.Name)
