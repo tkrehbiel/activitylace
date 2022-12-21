@@ -68,7 +68,7 @@ func (ai *ActivityInbox) PostHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	jsonBytes, err := io.ReadAll(io.LimitReader(r.Body, 4000))
+	jsonBytes, err := io.ReadAll(io.LimitReader(r.Body, 4000)) // limiter to minimize DoS
 	if err != nil {
 		telemetry.Error(err, "reading body bytes")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -84,7 +84,7 @@ func (ai *ActivityInbox) PostHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch act.Type {
 	case "Follow":
-		ai.Follow(w, act)
+		ai.Follow(w, act, jsonBytes)
 	case "Undo":
 		if objectMap, ok := act.Object.(map[string]interface{}); ok {
 			switch objectMap[activity.TypeProperty] {
@@ -110,7 +110,7 @@ func (ai *ActivityInbox) PostHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
+func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity, body []byte) {
 	// Yeesh this is more complex than I thought it would be
 
 	telemetry.Increment("follow_requests", 1)
@@ -191,6 +191,7 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 	telemetry.Trace("queuing an accept response")
 	ai.pipeline.Queue(&FollowResponse{
 		inbox:        ai,
+		object:       body,
 		follow:       follow,
 		followID:     act.ID,
 		remoteID:     actorID,
@@ -204,6 +205,7 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 
 type FollowResponse struct {
 	inbox        *ActivityInbox
+	object       []byte
 	follow       storage.Follow
 	followID     string
 	localID      string
@@ -223,6 +225,12 @@ func (f *FollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error
 		return nil, fmt.Errorf("looking up remote actor: %w", err)
 	}
 
+	// unmarshall the Follow body into a map so we can return it exactly as-is
+	var objectMap map[string]interface{}
+	if err := json.Unmarshal(f.object, &objectMap); err != nil {
+		return nil, fmt.Errorf("unmarshalling Follow object: %w", err)
+	}
+
 	// ActivityPub requires us to send an Accept response to the followee's inbox
 	// https://www.w3.org/TR/activitypub/#follow-activity-inbox
 	telemetry.Trace("sending accept request")
@@ -230,13 +238,13 @@ func (f *FollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error
 	acceptID := uuid.NewString()
 
 	acceptObject := struct {
-		Context string            `json:"@context"`
-		Type    string            `json:"type"`
-		ID      string            `json:"id"`
-		Actor   string            `json:"actor"`
-		Object  activity.Activity `json:"object"`
-		To      []string          `json:"to"`
-		CC      []string          `json:"cc"`
+		Context string                 `json:"@context"`
+		Type    string                 `json:"type"`
+		ID      string                 `json:"id"`
+		Actor   string                 `json:"actor"`
+		Object  map[string]interface{} `json:"object"`
+		To      []string               `json:"to"`
+		CC      []string               `json:"cc"`
 	}{
 		Context: activity.Context,
 		Type:    f.responseType,
@@ -244,13 +252,7 @@ func (f *FollowResponse) Prepare(pipeline *OutputPipeline) (*http.Request, error
 		Actor:   f.localID,
 		To:      []string{f.remoteID}, // Pleroma seems to require a to array
 		CC:      make([]string, 0),    // Pleroma seems to require a cc array
-		Object: activity.Activity{
-			// Return the information that was sent to us
-			Type:   activity.FollowType,
-			ID:     f.followID,
-			Actor:  f.remoteID,
-			Object: f.localID,
-		},
+		Object:  objectMap,            // The exact body that was sent to us
 	}
 
 	r, err := f.inbox.service.ActivityRequest(http.MethodPost, remote.Inbox, &acceptObject)

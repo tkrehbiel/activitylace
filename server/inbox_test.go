@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -86,6 +87,9 @@ func TestInbox_Follow(t *testing.T) {
 
 	remoteID = remoteActor.URL
 
+	body := []byte(fmt.Sprintf(`{"@context":%q,"type":%q,"id":%q,"actor":%q,"object":%q}`,
+		activity.Context, activity.FollowType, followID, remoteID, id))
+
 	database := &mockFollowers{}
 	database.On("GetFollowers").Return(nil, nil).Once()
 	database.On("FindFollow", remoteID).Return(nil, nil).Once()
@@ -102,19 +106,15 @@ func TestInbox_Follow(t *testing.T) {
 	inbox.followers = database
 
 	recorder := httptest.NewRecorder()
-	follow := activity.Activity{
-		Context: activity.Context,
-		Type:    activity.FollowType,
-		ID:      followID,
-		Actor:   remoteID,
-		Object:  id,
-	}
+
+	var follow activity.Activity
+	require.NoError(t, json.Unmarshal(body, &follow))
 
 	// wrap in a timeout to avoid potential deadlock
 	timeout := time.After(3 * time.Second)
 	done := make(chan bool)
 	go func() {
-		inbox.Follow(recorder, follow)
+		inbox.Follow(recorder, follow, body)
 		done <- true
 	}()
 	select {
@@ -183,6 +183,9 @@ func TestInbox_Follow_MaxFollowers(t *testing.T) {
 
 	remoteID = remoteActor.URL
 
+	body := []byte(fmt.Sprintf(`{"@context":%q,"type":%q,"id":%q,"actor":%q,"object":%q}`,
+		activity.Context, activity.FollowType, followID, remoteID, id))
+
 	database := &mockFollowers{}
 	database.On("GetFollowers").Return([]storage.Follow{
 		// 2 followers already
@@ -201,19 +204,15 @@ func TestInbox_Follow_MaxFollowers(t *testing.T) {
 	inbox.followers = database
 
 	recorder := httptest.NewRecorder()
-	follow := activity.Activity{
-		Context: activity.Context,
-		Type:    activity.FollowType,
-		ID:      followID,
-		Actor:   remoteID,
-		Object:  id,
-	}
+
+	var follow activity.Activity
+	require.NoError(t, json.Unmarshal(body, &follow))
 
 	// wrap in a timeout to avoid potential deadlock
 	timeout := time.After(3 * time.Second)
 	done := make(chan bool)
 	go func() {
-		inbox.Follow(recorder, follow)
+		inbox.Follow(recorder, follow, body)
 		done <- true
 	}()
 	select {

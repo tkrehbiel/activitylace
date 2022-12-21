@@ -12,17 +12,6 @@ import (
 	"github.com/tkrehbiel/activitylace/server/telemetry"
 )
 
-func validUser(username string) bool {
-	switch username {
-	case "blog":
-		return true
-	}
-	return false
-}
-
-const activityPubMimeType = "application/activity+json"
-const activityStreamMimeType = `application/ld+json`
-
 func readConfig(filename string) server.Config {
 	var cfg server.Config
 	b, err := os.ReadFile(filename)
