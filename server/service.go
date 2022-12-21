@@ -152,7 +152,7 @@ func (s *ActivityService) ActivityRequest(method string, url string, v any) (*ht
 	r.Header.Add("User-Agent", "Activitylace/0.1 (+https://github.com/tkrehbiel/activitylace)")
 	r.Header.Add("Accept", activity.ContentType)
 	r.Header.Add("Content-Type", activity.ContentType)
-	r.Header.Add("Host", s.config.Server.HostName)
+	r.Header.Add("Host", s.config.PublicHost())
 	r.Header.Add("Date", time.Now().UTC().Format(http.TimeFormat))
 	return r, nil
 }

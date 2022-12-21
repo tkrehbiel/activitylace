@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"net/url"
 )
 
 type serverConfig struct {
@@ -32,6 +33,14 @@ type Config struct {
 	URL    string       `json:"url"` // public-facing URL
 	Server serverConfig `json:"server"`
 	Users  []userConfig `json:"users"`
+}
+
+func (c Config) PublicHost() string {
+	u, err := url.Parse(c.URL)
+	if err != nil {
+		return ""
+	}
+	return u.Host
 }
 
 func ReadConfig(b []byte) (config Config, err error) {
