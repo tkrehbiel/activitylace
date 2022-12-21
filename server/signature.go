@@ -18,25 +18,27 @@ import (
 
 // At first I tried to use github.com/go-fed/httpsig but I had trouble communicating with Mastodon.
 
+// computeDigest creates a hash of the body
 func computeDigest(body []byte) string {
 	hash := sha256.New()
 	hash.Write(body)
 	return base64.StdEncoding.EncodeToString(hash.Sum(nil))
 }
 
-func computeSigningString(signedHeaders []string, r *http.Request) string {
-	signingStrings := make([]string, 0)
-	for _, hdr := range signedHeaders {
+// computeSigningString creates the normalized string from the given headers to be signed
+func computeSigningString(headers []string, r *http.Request) string {
+	components := make([]string, 0)
+	for _, hdr := range headers {
 		var s string
 		switch hdr {
 		case "(request-target)":
 			s = fmt.Sprintf("(request-target): %s %s", strings.ToLower(r.Method), r.URL.Path)
 		default:
-			s = fmt.Sprintf("%s: %s", hdr, r.Header.Get(hdr))
+			s = fmt.Sprintf("%s: %s", strings.ToLower(hdr), strings.TrimSpace(r.Header.Get(hdr)))
 		}
-		signingStrings = append(signingStrings, s)
+		components = append(components, s)
 	}
-	return strings.Join(signingStrings, "\n")
+	return strings.Join(components, "\n")
 }
 
 // sign an http request with a public and private key
@@ -76,7 +78,7 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 		return err
 	}
 	signature64 := base64.StdEncoding.EncodeToString(signature)
-	r.Header.Add("Signature", fmt.Sprintf(`keyId="%s",algorithm="rsa-sha256",created=%d,expires=%d,headers="%s",signature="%s"`,
+	r.Header.Add("Signature", fmt.Sprintf(`keyId="%s",algorithm="rsa-sha256",created="%d",expires="%d",headers="%s",signature="%s"`,
 		pubKeyId, created.Unix(), expires.Unix(), strings.Join(signedHeaders, " "), signature64))
 	return nil
 }
