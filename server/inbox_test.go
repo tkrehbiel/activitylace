@@ -140,7 +140,7 @@ func TestInbox_Follow_MaxFollowers(t *testing.T) {
 	var remoteID string
 
 	svc := ActivityService{
-		Config: Config{
+		config: Config{
 			Server: serverConfig{
 				MaxFollowers: 2,
 			},

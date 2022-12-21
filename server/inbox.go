@@ -170,7 +170,7 @@ func (ai *ActivityInbox) Follow(w http.ResponseWriter, act activity.Activity) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
-	if ai.service.Config.Server.MaxFollowers == 0 || len(followers) < ai.service.Config.Server.MaxFollowers {
+	if ai.service.config.Server.MaxFollowers == 0 || len(followers) < ai.service.config.Server.MaxFollowers {
 		// Save the new follower. We mark it as "pending" until we successfully
 		// send an Accept request back to the remote server.
 		// We only accept it if it doesn't exceed the maximum followers.

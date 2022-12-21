@@ -165,11 +165,11 @@ func (c *FeedWatcher) Watch(ctx context.Context, period time.Duration) {
 		select {
 		case <-ctx.Done():
 			// Parent context cancelled somehow
-			telemetry.Error(ctx.Err(), "context ended")
+			telemetry.Error(ctx.Err(), "watcher context ended")
 			return
 		case <-sigChannel:
 			// CTRL-C
-			telemetry.Log("received end signal")
+			telemetry.Trace("watcher received end signal")
 			return
 		case <-ticker.C:
 			err := c.Check(ctx)

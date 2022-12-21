@@ -24,9 +24,9 @@ import (
 )
 
 type ActivityService struct {
-	Config     Config
-	Server     http.Server
-	Pipeline   *OutputPipeline
+	config     Config
+	server     http.Server
+	pipeline   *OutputPipeline
 	router     *mux.Router
 	client     http.Client
 	meta       page.MetaData
@@ -51,7 +51,7 @@ func (s *ActivityService) addHandlers() {
 	s.addPageHandler(page.NewStaticPage(page.WellKnownNodeInfo), s.meta)
 	s.addPageHandler(page.NewStaticPage(page.NodeInfo), s.meta)
 
-	for _, u := range s.Config.Users {
+	for _, u := range s.config.Users {
 		page.WellKnownWebFinger.Add(u.Name, s.meta)
 	}
 	s.addPageHandler(&page.WellKnownWebFinger, s.meta)
@@ -71,17 +71,17 @@ func (s *ActivityService) addHandlers() {
 
 		outpath := fmt.Sprintf("/%s/%s/outbox", page.SubPath, user.name)
 		route := s.router.HandleFunc(outpath, user.outbox.ServeHTTP).Methods("GET") // TODO: filter by Accept
-		if !s.Config.Server.AcceptAll {
+		if !s.config.Server.AcceptAll {
 			route.HeadersRegexp("Accept", "application/.*json")
 		}
 
 		inpath := fmt.Sprintf("/%s/%s/inbox", page.SubPath, user.name)
 		route = s.router.HandleFunc(inpath, user.inbox.GetHTTP).Methods("GET") // TODO: filter by Accept
-		if !s.Config.Server.AcceptAll {
+		if !s.config.Server.AcceptAll {
 			route.HeadersRegexp("Accept", "application/.*json")
 		}
 		route = s.router.HandleFunc(inpath, user.inbox.PostHTTP).Methods("POST")
-		if !s.Config.Server.AcceptAll {
+		if !s.config.Server.AcceptAll {
 			route.HeadersRegexp("Content-Type", "application/.*json")
 		}
 
@@ -93,13 +93,26 @@ func (s *ActivityService) addHandlers() {
 func (s *ActivityService) addPageHandler(pg page.StaticPageHandler, meta any) {
 	pg.Init(meta)
 	router := s.router.HandleFunc(pg.Path(), pg.ServeHTTP).Methods("GET")
-	if !s.Config.Server.AcceptAll && pg.Accept() != "" && pg.Accept() != "*/*" {
+	if !s.config.Server.AcceptAll && pg.Accept() != "" && pg.Accept() != "*/*" {
 		router.HeadersRegexp("Accept", pg.Accept())
 	}
 }
 
-// Close anything related to the service before exiting
-func (s *ActivityService) Close() {
+func (s *ActivityService) Start(ctx context.Context) {
+	go s.pipeline.Run(ctx)
+	go func() {
+		err := s.ListenAndServe(ctx)
+		if err != nil && err != http.ErrServerClosed {
+			telemetry.Error(err, "while listening")
+		}
+	}()
+}
+
+// Stop anything related to the service before exiting
+func (s *ActivityService) Stop(ctx context.Context) {
+	if err := s.server.Shutdown(ctx); err != nil {
+		telemetry.Error(err, "while shutting down server")
+	}
 	for i := range s.users {
 		s.users[i].store.Close()
 	}
@@ -108,18 +121,18 @@ func (s *ActivityService) Close() {
 
 func (s *ActivityService) ListenAndServe(ctx context.Context) error {
 	// Spawn RSS feed watcher goroutines
-	if s.Pipeline == nil {
+	if s.pipeline == nil {
 		panic("ActivityService doesn't have a Pipeline")
 	}
 	for i := range s.users {
 		go s.users[i].outbox.WatchRSS(ctx)
 	}
-	if s.Config.Server.useTLS() {
-		telemetry.Log("tls listener starting on port %d", s.Config.Server.Port)
-		return s.Server.ListenAndServeTLS(s.Config.Server.Certificate, s.Config.Server.PrivateKey)
+	if s.config.Server.useTLS() {
+		telemetry.Log("tls listener starting on port %d", s.config.Server.Port)
+		return s.server.ListenAndServeTLS(s.config.Server.Certificate, s.config.Server.PrivateKey)
 	} else {
-		telemetry.Log("http listener starting on port %d", s.Config.Server.Port)
-		return s.Server.ListenAndServe()
+		telemetry.Log("http listener starting on port %d", s.config.Server.Port)
+		return s.server.ListenAndServe()
 	}
 }
 
@@ -139,7 +152,7 @@ func (s *ActivityService) ActivityRequest(method string, url string, v any) (*ht
 	r.Header.Add("User-Agent", "Activitylace/0.1 (+https://github.com/tkrehbiel/activitylace)")
 	r.Header.Add("Accept", activity.ContentType)
 	r.Header.Add("Content-Type", activity.ContentType)
-	r.Header.Add("Host", s.Config.Server.HostName)
+	r.Header.Add("Host", s.config.Server.HostName)
 	r.Header.Add("Date", time.Now().UTC().Format(http.TimeFormat))
 	return r, nil
 }
@@ -221,14 +234,14 @@ func NewService(cfg Config) *ActivityService {
 		client: http.Client{
 			Timeout: time.Second * 15,
 		},
-		Config:     cfg,
+		config:     cfg,
 		router:     mux.NewRouter(),
 		users:      make([]ActivityUser, 0),
 		actorCache: ccache.New(ccache.Configure[activity.Actor]()),
 	}
 
-	svc.Pipeline = NewPipeline()
-	svc.Pipeline.client = svc.client
+	svc.pipeline = NewPipeline()
+	svc.pipeline.client = svc.client
 
 	u, err := url.Parse(cfg.URL)
 	if err != nil {
@@ -236,7 +249,7 @@ func NewService(cfg Config) *ActivityService {
 		return &svc
 	}
 
-	svc.Pipeline.host = u.Host
+	svc.pipeline.host = u.Host
 
 	// metadata available to page templates
 	svc.meta = page.MetaData{
@@ -313,7 +326,7 @@ func NewService(cfg Config) *ActivityService {
 			rssURL:         usercfg.SourceURL,
 			notes:          store.(storage.Notes),
 			followers:      store.(storage.Followers),
-			pipeline:       svc.Pipeline,
+			pipeline:       svc.pipeline,
 			privKey:        serverUser.privKey,
 			pubKeyID:       umeta.UserPublicKeyID,
 			acceptUnsigned: cfg.Server.ReceiveUnsigned,
@@ -325,7 +338,7 @@ func NewService(cfg Config) *ActivityService {
 			id:             path.Join(svc.meta.URL, fmt.Sprintf("%s/%s/inbox", page.SubPath, usercfg.Name)),
 			ownerID:        serverUser.meta.UserID,
 			followers:      store.(storage.Followers),
-			pipeline:       svc.Pipeline,
+			pipeline:       svc.pipeline,
 			privKey:        serverUser.privKey,
 			pubKeyID:       umeta.UserPublicKeyID,
 			acceptUnsigned: cfg.Server.ReceiveUnsigned,
@@ -347,7 +360,7 @@ func NewService(cfg Config) *ActivityService {
 	// Log all requests in the router without having to explicitly do so
 	svc.router.Use(RequestLoggerMiddleware(svc.router))
 
-	svc.Server = http.Server{
+	svc.server = http.Server{
 		Handler:      svc.router,
 		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
 		WriteTimeout: time.Second * 15,

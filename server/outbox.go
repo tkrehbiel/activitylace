@@ -106,6 +106,7 @@ func (f *NoteActivity) Prepare(pipeline *OutputPipeline) (*http.Request, error) 
 		To:      []string{f.remoteID}, // Pleroma seems to require a to array
 		CC:      make([]string, 0),    // Pleroma seems to require a cc array
 		Object: activity.Note{
+			Context:   activity.Context,
 			Type:      activity.NoteType,
 			ID:        f.note.ID,
 			Content:   f.note.Content,

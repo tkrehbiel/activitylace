@@ -4,7 +4,6 @@ package main
 import (
 	"context"
 	"flag"
-	"net/http"
 	"os"
 	"os/signal"
 	"time"
@@ -67,25 +66,19 @@ func main() {
 
 	svc := server.NewService(cfg)
 
-	// Startup the output pipeline to wait for messages to send
-	go svc.Pipeline.Run(context.Background())
-
 	// Startup the service to listen for http requests
-	go func() {
-		err := svc.ListenAndServe(context.Background())
-		if err != nil && err != http.ErrServerClosed {
-			telemetry.Error(err, "while listening")
-		}
-	}()
+	svc.Start(context.Background())
 
+	// Wait for ^C
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 
 	<-c
+	telemetry.Log("stopping activitylace")
 
+	// Shut down the service
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
 	defer cancel()
-	svc.Server.Shutdown(ctx)
-	svc.Close()
-	telemetry.Log("stopping activitylace cleanly")
+	svc.Stop(ctx)
+	telemetry.Log("stopped activitylace cleanly")
 }
