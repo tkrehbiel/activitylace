@@ -15,9 +15,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/karlseguin/ccache/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tkrehbiel/activitylace/server/activity"
+	"github.com/tkrehbiel/activitylace/server/page"
 )
 
 type mockLoader struct {
@@ -44,12 +47,15 @@ func TestSignAndVerify_Self(t *testing.T) {
 	encoded64 := base64.StdEncoding.EncodeToString(digest.Sum(nil))
 	expectedDigest := fmt.Sprintf("SHA-256=%s", encoded64)
 
+	date := time.Date(2022, 12, 21, 6, 7, 8, 0, time.UTC)
+
 	body := bytes.NewBuffer(content)
 	pubKeyID := "abc"
-	r := httptest.NewRequest("POST", "http://127.0.0.1", body)
-	r.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
+	r := httptest.NewRequest("POST", "http://127.0.0.1/path", body)
+	r.Header.Set("Date", date.Format(http.TimeFormat))
 	r.Header.Set("Host", "testhost")
-	r.Header.Set("Content-Type", "application/activity+json")
+	r.Header.Set("Content-Type", "text/plain")
+	r.Header.Set("Content-Length", fmt.Sprintf("%d", len(content)))
 
 	err = sign(privKey, pubKeyID, r)
 	require.NoError(t, err)
@@ -62,7 +68,12 @@ func TestSignAndVerify_Self(t *testing.T) {
 	assert.Contains(t, r.Header.Get("Signature"), "host")
 	assert.Contains(t, r.Header.Get("Signature"), "date")
 	assert.Contains(t, r.Header.Get("Signature"), "digest")
+	assert.Contains(t, r.Header.Get("Signature"), "content-length")
 
+	fmt.Println(r.Header.Get("Host"))
+	fmt.Println(r.Header.Get("Date"))
+	fmt.Println(r.Header.Get("Content-Type"))
+	fmt.Println(r.Header.Get("Content-Length"))
 	fmt.Println(r.Header.Get("Digest"))
 	fmt.Println(r.Header.Get("Signature"))
 
@@ -130,19 +141,46 @@ func TestSignAndVerify_External(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, pubKey)
 
+	// Testing the whole round trip to the actor URL and fetching the public key
+
+	svc := ActivityService{
+		actorCache: ccache.New(ccache.Configure[activity.Actor]()),
+	}
+
+	actorPage := page.ActorEndpoint
+	staticPage := page.NewStaticPage(actorPage)
+
+	remoteActor := httptest.NewServer(staticPage)
+	defer remoteActor.Close()
+
+	pubKeyID := remoteActor.URL + "#main-key"
+
+	umeta := page.UserMetaData{
+		UserID:          remoteActor.URL,
+		UserPublicKeyID: pubKeyID,
+		UserPublicKey:   testPublicKey,
+	}
+	staticPage.Init(umeta)
+
+	date := time.Date(2022, 12, 25, 6, 7, 8, 0, time.UTC)
+
 	body := bytes.NewBuffer([]byte("test body content"))
-	pubKeyID := "abc"
-	r := httptest.NewRequest("POST", "http://127.0.0.1", body)
-	r.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
+	r := httptest.NewRequest("POST", "http://127.0.0.1/path", body)
+	r.Header.Set("Date", date.Format(http.TimeFormat))
 	r.Header.Set("Host", "testhost")
-	r.Header.Set("Content-Type", "application/activity+json")
+	r.Header.Set("Content-Type", "text/plain")
+	r.Header.Set("Content-Length", fmt.Sprintf("%d", body.Len()))
 
 	sign(privKey, pubKeyID, r)
-	assert.NotEmpty(t, r.Header.Get("Digest"))
-	assert.NotEmpty(t, r.Header.Get("Signature"))
 
-	loader := &mockLoader{}
-	loader.On("GetActorPublicKey", pubKeyID).Return(pubKey)
+	// no need to duplicate the validations in the other unit test here
 
-	assert.NoError(t, verify(loader, r))
+	fmt.Println(r.Header.Get("Host"))
+	fmt.Println(r.Header.Get("Date"))
+	fmt.Println(r.Header.Get("Content-Type"))
+	fmt.Println(r.Header.Get("Content-Length"))
+	fmt.Println(r.Header.Get("Digest"))
+	fmt.Println(r.Header.Get("Signature"))
+
+	assert.NoError(t, verify(&svc, r))
 }

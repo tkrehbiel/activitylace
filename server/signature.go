@@ -58,7 +58,9 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 	if len(body) > 0 {
 		digest := computeDigest(body)
 		r.Header.Add("Digest", fmt.Sprintf("SHA-256=%s", digest))
-		r.Header.Add("Content-Length", fmt.Sprintf("%d", len(body)))
+		if r.Header.Get("Content-Length") == "" {
+			r.Header.Add("Content-Length", fmt.Sprintf("%d", len(body)))
+		}
 	}
 
 	// Generate the signing string from headers

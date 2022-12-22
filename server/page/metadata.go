@@ -3,6 +3,7 @@ package page
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/tkrehbiel/activitylace/server/activity"
 )
@@ -86,4 +87,10 @@ func (m UserMetaData) FollowingURL() string {
 func (m UserMetaData) FollowersURL() string {
 	s, _ := url.JoinPath(m.URL, fmt.Sprintf("%s/%s/followers", SubPath, m.UserName))
 	return s
+}
+
+func (m UserMetaData) TransformedPublicKey() string {
+	// Replace both \r\n and \n to be sure
+	s := strings.ReplaceAll(m.UserPublicKey, "\r\n", `\n`)
+	return strings.ReplaceAll(s, "\n", `\n`)
 }

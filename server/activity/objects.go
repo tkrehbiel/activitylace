@@ -1,5 +1,7 @@
 package activity
 
+import "strings"
+
 type Object struct {
 	Context interface{} `json:"@context,omitempty"`
 	Type    string      `json:"type"`
@@ -28,6 +30,10 @@ type publicKey struct {
 	ID    string `json:"id"`
 	Owner string `json:"owner"`
 	Key   string `json:"publicKeyPem"`
+}
+
+func (p publicKey) TransformedKey() string {
+	return strings.ReplaceAll(p.Key, `\n`, "\n")
 }
 
 type Actor struct {

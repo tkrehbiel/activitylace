@@ -24,7 +24,7 @@ var ActorEndpoint = StaticPage{
     "publicKey": {
         "id": "{{ .UserPublicKeyID }}",
         "owner": "{{ .UserID }}",
-        "publicKeyPem": "{{ .UserPublicKey }}"
+        "publicKeyPem": "{{ .TransformedPublicKey }}"
     },
 	"summary": "{{ .UserSummary }}"
 	{{- if .AvatarURL -}},

@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -215,7 +214,7 @@ func (s *ActivityService) GetActorPublicKey(id string) crypto.PublicKey {
 		telemetry.Error(err, "remote public key ID [%s] doesn't match [%s]", actor.PublicKey.ID, id)
 		return nil
 	}
-	pubKeyPem := actor.PublicKey.Key
+	pubKeyPem := actor.PublicKey.TransformedKey()
 	der, _ := pem.Decode([]byte(pubKeyPem))
 	if der == nil {
 		telemetry.Error(nil, "can't decode pem [%s]", pubKeyPem)
@@ -227,6 +226,30 @@ func (s *ActivityService) GetActorPublicKey(id string) crypto.PublicKey {
 		return nil
 	}
 	return pubKey
+}
+
+func decodePrivateKey(content []byte) (any, error) {
+	p, _ := pem.Decode(content)
+	if p == nil {
+		return nil, fmt.Errorf("failed to decode pem")
+	}
+
+	switch p.Type {
+	case "PRIVATE KEY":
+		key, err := x509.ParsePKCS8PrivateKey(p.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("parsing PKCS8 private key file: %w", err)
+		}
+		return key, nil
+	case "RSA PRIVATE KEY":
+		key, err := x509.ParsePKCS1PrivateKey(p.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("parsing PKCS1 private key file: %w", err)
+		}
+		return key, nil
+	default:
+		return nil, fmt.Errorf("unknown private key type %s", p.Type)
+	}
 }
 
 // NewService creates an http service to listen for ActivityPub requests
@@ -274,31 +297,12 @@ func NewService(cfg Config) *ActivityService {
 				continue
 			}
 
-			p, _ := pem.Decode(der)
-			if p == nil {
-				telemetry.Error(nil, "decoding private key pem [%s]", usercfg.PrivKeyFile)
+			key, err := decodePrivateKey(der)
+			if err != nil {
+				telemetry.Error(err, "decoding private key [%s]", usercfg.PrivKeyFile)
 				continue
 			}
-
-			switch p.Type {
-			case "PRIVATE KEY":
-				key, err := x509.ParsePKCS8PrivateKey(p.Bytes)
-				if err != nil {
-					telemetry.Error(err, "parsing PKCS8 private key file [%s]", usercfg.PrivKeyFile)
-					continue
-				}
-				serverUser.privKey = key
-			case "RSA PRIVATE KEY":
-				key, err := x509.ParsePKCS1PrivateKey(p.Bytes)
-				if err != nil {
-					telemetry.Error(err, "parsing PKCS1 private key file [%s]", usercfg.PrivKeyFile)
-					continue
-				}
-				serverUser.privKey = key
-			default:
-				telemetry.Error(nil, "unknown private key type %s in file [%s]", p.Type, usercfg.PrivKeyFile)
-				continue
-			}
+			serverUser.privKey = key
 		}
 
 		if usercfg.PubKeyFile != "" {
@@ -307,7 +311,7 @@ func NewService(cfg Config) *ActivityService {
 				telemetry.Error(err, "reading public key file [%s]", usercfg.PubKeyFile)
 				continue
 			}
-			umeta.UserPublicKey = strings.ReplaceAll(string(b), "\r\n", `\n`)
+			umeta.UserPublicKey = string(b)
 		}
 
 		dbName := fmt.Sprintf("user_%s.db", usercfg.Name)
