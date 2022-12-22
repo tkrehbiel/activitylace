@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"crypto"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
@@ -68,9 +69,8 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 	signingString := computeSigningString(signedHeaders, r)
 
 	// Create the signature
-	sigHash := sha256.New()
-	sigHash.Write([]byte(signingString))
-	signature, err := rsa.SignPKCS1v15(nil, rsaKey, crypto.SHA256, sigHash.Sum(nil))
+	sigHash := sha256.Sum256([]byte(signingString))
+	signature, err := rsa.SignPKCS1v15(rand.Reader, rsaKey, crypto.SHA256, sigHash[:])
 	if err != nil {
 		return err
 	}
