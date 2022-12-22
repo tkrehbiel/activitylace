@@ -19,9 +19,8 @@ import (
 
 // computeDigest creates a hash of the body
 func computeDigest(body []byte) string {
-	hash := sha256.New()
-	hash.Write(body)
-	return base64.StdEncoding.EncodeToString(hash.Sum(nil))
+	hash := sha256.Sum256(body)
+	return base64.StdEncoding.EncodeToString(hash[:])
 }
 
 // computeSigningString creates the normalized string from the given headers to be signed
@@ -59,12 +58,13 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 	if len(body) > 0 {
 		digest := computeDigest(body)
 		r.Header.Add("Digest", fmt.Sprintf("SHA-256=%s", digest))
+		r.Header.Add("Content-Length", fmt.Sprintf("%d", body))
 	}
 
 	// Generate the signing string from headers
 	signedHeaders := []string{"(request-target)", "host", "date"}
 	if len(body) > 0 {
-		signedHeaders = append(signedHeaders, "digest")
+		signedHeaders = append(signedHeaders, "digest", "content-length")
 	}
 	signingString := computeSigningString(signedHeaders, r)
 
