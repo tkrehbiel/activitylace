@@ -20,7 +20,6 @@ var ActorEndpoint = StaticPage{
 	"following": "{{ .FollowingURL }}",
 	"name": "{{ .UserDisplayName }}",
 	"preferredUsername": "{{ .UserName }}",
-	"manuallyApprovesFollowers": true,
     "publicKey": {
         "id": "{{ .UserPublicKeyID }}",
         "owner": "{{ .UserID }}",
