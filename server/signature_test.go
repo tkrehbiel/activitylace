@@ -68,7 +68,7 @@ func TestSignAndVerify_Self(t *testing.T) {
 	assert.Contains(t, r.Header.Get("Signature"), "host")
 	assert.Contains(t, r.Header.Get("Signature"), "date")
 	assert.Contains(t, r.Header.Get("Signature"), "digest")
-	assert.Contains(t, r.Header.Get("Signature"), "content-length")
+	//assert.Contains(t, r.Header.Get("Signature"), "content-length")
 
 	fmt.Println(r.Header.Get("Host"))
 	fmt.Println(r.Header.Get("Date"))

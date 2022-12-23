@@ -43,6 +43,11 @@ func computeSigningString(headers []string, r *http.Request) string {
 func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error {
 	// I'm genuinely unsure if go-fed/httpsig signature generation works right,
 	// so I'm generating this signature manually.
+	// Uses rsa-sha256 for maximum interoperability even though that's not the newest/best one.
+
+	if r.Header.Get("Date") == "" {
+		return fmt.Errorf("request needs a Date header")
+	}
 
 	rsaKey, ok := privateKey.(*rsa.PrivateKey)
 	if !ok {
@@ -58,15 +63,15 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 	if len(body) > 0 {
 		digest := computeDigest(body)
 		r.Header.Add("Digest", fmt.Sprintf("SHA-256=%s", digest))
-		if r.Header.Get("Content-Length") == "" {
-			r.Header.Add("Content-Length", fmt.Sprintf("%d", len(body)))
-		}
+		// if r.Header.Get("Content-Length") == "" {
+		// 	r.Header.Add("Content-Length", fmt.Sprintf("%d", len(body)))
+		// }
 	}
 
 	// Generate the signing string from headers
 	signedHeaders := []string{"(request-target)", "host", "date"}
 	if len(body) > 0 {
-		signedHeaders = append(signedHeaders, "digest", "content-length")
+		signedHeaders = append(signedHeaders, "digest") // ,"content-length")
 	}
 	signingString := computeSigningString(signedHeaders, r)
 
@@ -77,6 +82,7 @@ func sign(privateKey crypto.PrivateKey, pubKeyId string, r *http.Request) error 
 		return err
 	}
 	signature64 := base64.StdEncoding.EncodeToString(signature)
+	// Seems to fail if there are spaces after the commas
 	r.Header.Add("Signature", fmt.Sprintf(`keyId="%s",algorithm="rsa-sha256",headers="%s",signature="%s"`,
 		pubKeyId, strings.Join(signedHeaders, " "), signature64))
 	return nil
