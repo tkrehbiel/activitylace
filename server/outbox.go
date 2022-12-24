@@ -34,9 +34,10 @@ func (ao *ActivityOutbox) NewItem(item rss.Item) {
 	telemetry.Trace("new item [%s]", item.Title)
 	telemetry.Increment("rss_newitems", 1)
 	obj := storage.Note{
-		ID:        item.ID,
+		ID:        item.ID, // TODO: feel like this should generate a unique ID bound to server's domain
 		Content:   item.Title,
 		Published: item.Published,
+		URL:       item.URL,
 	}
 	if err := ao.notes.SaveNote(&obj); err != nil {
 		telemetry.Error(err, "updating storage for [%s]", item.ID)
@@ -112,6 +113,7 @@ func (f *NoteActivity) Prepare(pipeline *OutputPipeline) (*http.Request, error) 
 			Content:   f.note.Content,
 			MediaType: "text/plain",
 			Published: f.note.Published.Format(activity.TimeFormat),
+			URL:       f.note.URL,
 		},
 	}
 
@@ -190,6 +192,7 @@ func (ao *ActivityOutbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			ID:        note.ID,
 			Published: note.Published.Format(activity.TimeFormat),
 			Content:   note.Content,
+			URL:       note.URL,
 		}
 	}
 

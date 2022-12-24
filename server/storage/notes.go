@@ -11,6 +11,7 @@ type Note struct {
 	ID        string    `json:"id"`
 	Published time.Time `json:"published"`
 	Content   string    `json:"content"`
+	URL       string    `json:"url"`
 	Source    string    // json source
 }
 

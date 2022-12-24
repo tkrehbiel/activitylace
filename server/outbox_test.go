@@ -38,12 +38,14 @@ func TestOutbox_NoteActivity(t *testing.T) {
 		Title:     "itemtitle",
 		Content:   "itemcontent",
 		Published: time.Now().UTC(),
+		URL:       "itemurl",
 	}
 	testItem2 := rss.Item{
 		ID:        "itemid2",
 		Title:     "itemtitle2",
 		Content:   "itemcontent2",
 		Published: time.Now().UTC(),
+		URL:       "itemurl2",
 	}
 
 	// Simulate the remote inbox
@@ -100,11 +102,13 @@ func TestOutbox_NoteActivity(t *testing.T) {
 		ID:        testItem.ID,
 		Published: testItem.Published,
 		Content:   testItem.Title,
+		URL:       testItem.URL,
 	}).Return(nil).Once()
 	notesDB.On("SaveNote", &storage.Note{
 		ID:        testItem2.ID,
 		Published: testItem2.Published,
 		Content:   testItem2.Title,
+		URL:       testItem2.URL,
 	}).Return(nil).Once()
 	outbox.notes = notesDB
 
