@@ -25,25 +25,26 @@ import (
 
 type ActivityService struct {
 	config     Config
-	server     http.Server
-	pipeline   *OutputPipeline
-	router     *mux.Router
-	client     http.Client
-	meta       page.MetaData
-	users      []ActivityUser
+	server     http.Server     // for serving http responses
+	router     *mux.Router     // for request routing
+	pipeline   *OutputPipeline // on which output messages are queued
+	client     http.Client     // http client for outgoing requests
+	meta       page.MetaData   // metadata for page templates
+	users      []ActivityUser  // ActivityPub user accounts handled
 	actorCache *ccache.Cache[activity.Actor]
 }
 
 type ActivityUser struct {
-	name     string
-	meta     page.UserMetaData
-	store    storage.Database
-	outbox   ActivityOutbox
-	inbox    ActivityInbox
-	privKey  crypto.PrivateKey
-	pubKeyID string
+	name     string            // name of the account
+	meta     page.UserMetaData // metadata for the account
+	store    storage.Database  // associated data storage
+	outbox   ActivityOutbox    // outbox
+	inbox    ActivityInbox     // inbox
+	privKey  crypto.PrivateKey // private key
+	pubKeyID string            // public key ID
 }
 
+// addHandlers creates page routes for handling ActivityPub endpoints
 func (s *ActivityService) addHandlers() {
 	s.router.HandleFunc("/", homeHandler).Methods("GET")
 
@@ -98,6 +99,7 @@ func (s *ActivityService) addPageHandler(pg page.StaticPageHandler, meta any) {
 	}
 }
 
+// Start running the ActivityPub service and return immediately
 func (s *ActivityService) Start(ctx context.Context) {
 	go s.pipeline.Run(ctx)
 	go func() {
@@ -119,6 +121,7 @@ func (s *ActivityService) Stop(ctx context.Context) {
 	telemetry.LogCounters()
 }
 
+// ListenAndServe; listen for http requests and serve responses
 func (s *ActivityService) ListenAndServe(ctx context.Context) error {
 	// Spawn RSS feed watcher goroutines
 	if s.pipeline == nil {
@@ -136,6 +139,7 @@ func (s *ActivityService) ListenAndServe(ctx context.Context) error {
 	}
 }
 
+// ActivityRequest creates an http request for sending ActivityPub communications
 func (s *ActivityService) ActivityRequest(method string, url string, v any) (*http.Request, error) {
 	var reader io.Reader
 	if v != nil {
@@ -159,6 +163,7 @@ func (s *ActivityService) ActivityRequest(method string, url string, v any) (*ht
 
 // GetActor finds the remote endpoint for the actor ID, which is assumed to be a URL.
 // Blocks until we get a response or the context is cancelled or times out.
+// TODO: Include a context param.
 func (s *ActivityService) GetActor(id string) (*activity.Actor, error) {
 	item := s.actorCache.Get(id)
 	if item != nil && !item.Expired() {
@@ -191,6 +196,9 @@ func (s *ActivityService) GetActor(id string) (*activity.Actor, error) {
 	return &actor, nil
 }
 
+// GetActorPublicKey fetches the public key ID associated with the given actor URL.
+// Blocks until a result is returned.
+// TODO: Include a context param.
 func (s *ActivityService) GetActorPublicKey(id string) crypto.PublicKey {
 	// TODO: Cache this result!
 	url, err := url.Parse(id)
